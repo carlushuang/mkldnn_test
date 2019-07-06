@@ -121,12 +121,12 @@ int main(){
     int h = 55;
     int w = 55;
     int k = 16;
-    int r = 5;
-    int s = 5;
-    int p = 2;
-    int q = 2;
-    int u = 1;
-    int v = 1;
+    int r = 7;
+    int s = 7;
+    int p = 3;
+    int q = 3;
+    int u = 2;
+    int v = 2;
     int dh = 2;
     int dw = 2;
     int oh = out_size(h, p, dh, r, u);
@@ -167,7 +167,7 @@ int main(){
         delete [] t_filter;
     }
 #endif
-#if 1
+#if 0
     {
         float * t_input_grad;
         float * t_input_grad_2;
@@ -200,6 +200,43 @@ int main(){
         delete [] t_input_grad;
         delete [] t_input_grad_2;
         delete [] t_filter;
+        delete [] t_out_grad;
+    }
+#endif
+#if 1
+    {
+        float * t_input;
+        float * t_filter_grad;
+        float * t_filter_grad_2;
+        float * t_out_grad;
+
+        t_input = new float[n*c*h*w];
+        t_filter_grad = new float[k*c*r*s];
+        t_filter_grad_2 = new float[k*c*r*s];
+        t_out_grad = new float[n*k*oh*ow];
+        
+        rand_vector(t_input, n*c*h*w);
+        rand_vector(t_out_grad, n*k*oh*ow);
+        
+        md_handle md_h;
+        md_conv_handle md_conv_h;
+
+        md_init(&md_h);
+        md_conv_init(&md_conv_h,n,c,h,w,k,r,s,p,q,u,v,dh,dw);
+        
+        //md_conv_bwd_f_nchw(&md_h, &md_conv_h, t_input, t_filter_grad, t_out_grad);
+        //naive_conv_bwd_f_nchw(t_input, t_filter_grad_2, t_out_grad, n,c,h,w,k,r,s,p,q,u,v,dh,dw);
+        md_conv_bwd_f_cnhw(&md_h, &md_conv_h, t_input, t_filter_grad, t_out_grad);
+        naive_conv_bwd_f_cnhw(t_input, t_filter_grad_2, t_out_grad, n,c,h,w,k,r,s,p,q,u,v,dh,dw);
+        int err_cnt=valid_vector(t_filter_grad, t_filter_grad_2, k*c*r*s, 0.03);
+        printf("bwd_f %s\n",err_cnt==0?"ok":"fail");
+
+        md_conv_destroy(&md_conv_h);
+        md_destroy(&md_h);
+
+        delete [] t_input;
+        delete [] t_filter_grad;
+        delete [] t_filter_grad_2;
         delete [] t_out_grad;
     }
 #endif

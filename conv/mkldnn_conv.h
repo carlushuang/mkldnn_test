@@ -28,9 +28,9 @@ typedef struct{
     mkldnn::memory::desc *filter_desc;
     mkldnn::memory::desc *dst_desc;
 
-    mkldnn::convolution_forward::desc *fwd_desc;
-    mkldnn::convolution_backward_data::desc *bwd_d_desc;
-    mkldnn::convolution_backward_weights::desc * bwd_f_desc;
+    mkldnn::convolution_forward::desc           *fwd_desc;
+    mkldnn::convolution_backward_data::desc     *bwd_d_desc;
+    mkldnn::convolution_backward_weights::desc  *bwd_f_desc;
 
     //mkldnn::convolution_forward *fwd;
 }md_conv_handle;
@@ -73,6 +73,9 @@ void md_conv_init(md_conv_handle *conv,int n, int c, int h, int w, int k, int r,
                         *conv->src_desc,*conv->filter_desc,*conv->dst_desc,
                         {u,v},{dh-1,dw-1},{p,q},{p,q},mkldnn::padding_kind::zero);
     
+    conv->bwd_f_desc = new mkldnn::convolution_backward_weights::desc(mkldnn::algorithm::convolution_direct,
+                        *conv->src_desc,*conv->filter_desc,*conv->dst_desc,
+                        {u,v},{dh-1,dw-1},{p,q},{p,q},mkldnn::padding_kind::zero);
 }
 void md_conv_destroy(md_conv_handle * conv){
     delete conv->src_desc;
@@ -80,6 +83,7 @@ void md_conv_destroy(md_conv_handle * conv){
     delete conv->dst_desc;
     delete conv->fwd_desc;
     delete conv->bwd_d_desc;
+    delete conv->bwd_f_desc;
 }
 void md_conv_fwd_nchw(md_handle *mh, md_conv_handle *conv, float * src, float * filter, float * dst){
     auto src_memory = mkldnn::memory( {*conv->src_desc,*mh->eng}, src  );
@@ -134,6 +138,33 @@ void md_conv_bwd_d_cnhw(md_handle *mh, md_conv_handle *conv, float * src_grad, f
     mkldnn::stream(mkldnn::stream::kind::eager).submit({conv_bwd_d}).wait();
     nchw_2_cnhw(src_grad, src_grad_nchw, n, c, h, w);
     delete [] src_grad_nchw;
+    delete [] dst_grad_nchw;
+}
+void md_conv_bwd_f_nchw(md_handle *mh, md_conv_handle *conv, float * src, float * filter_grad, float * dst_grad){
+    auto src_memory = mkldnn::memory( {*conv->src_desc,*mh->eng}, src  );
+    auto filter_grad_memory = mkldnn::memory({*conv->filter_desc, *mh->eng}, filter_grad  );
+    auto dst_grad_memory = mkldnn::memory({*conv->dst_desc, *mh->eng}, dst_grad);
+    mkldnn::convolution_backward_weights conv_bwd_f({*conv->bwd_f_desc,*mh->eng, {*conv->fwd_desc,*mh->eng}},src_memory,dst_grad_memory,filter_grad_memory);
+    mkldnn::stream(mkldnn::stream::kind::eager).submit({conv_bwd_f}).wait();
+}
+void md_conv_bwd_f_cnhw(md_handle *mh, md_conv_handle *conv, float * src, float * filter_grad, float * dst_grad){
+    int n = conv->src_desc->data.dims[0];
+    int c = conv->src_desc->data.dims[1];
+    int h = conv->src_desc->data.dims[2];
+    int w = conv->src_desc->data.dims[3];
+    int k = conv->dst_desc->data.dims[1];
+    int oh = conv->dst_desc->data.dims[2];
+    int ow = conv->dst_desc->data.dims[3];
+    float * src_nchw = new float[n*c*h*w];
+    float * dst_grad_nchw = new float[n*k*oh*ow];
+    cnhw_2_nchw(dst_grad_nchw, dst_grad, n, k, oh, ow);
+    cnhw_2_nchw(src_nchw, src, n, c, h, w);
+    auto src_memory = mkldnn::memory( {*conv->src_desc,*mh->eng}, src_nchw  );
+    auto filter_grad_memory = mkldnn::memory({*conv->filter_desc, *mh->eng}, filter_grad  );
+    auto dst_grad_memory = mkldnn::memory({*conv->dst_desc, *mh->eng}, dst_grad_nchw);
+    mkldnn::convolution_backward_weights conv_bwd_f({*conv->bwd_f_desc,*mh->eng, {*conv->fwd_desc,*mh->eng}},src_memory,dst_grad_memory,filter_grad_memory);
+    mkldnn::stream(mkldnn::stream::kind::eager).submit({conv_bwd_f}).wait();
+    delete [] src_nchw;
     delete [] dst_grad_nchw;
 }
 #endif

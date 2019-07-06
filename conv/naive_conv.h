@@ -143,4 +143,72 @@ void naive_conv_bwd_d_cnhw(float *src_grad, const float *filter, const float *ds
         }
     }
 }
+
+void naive_conv_bwd_f_nchw(const float *src, float *filter_grad, const float *dst_grad,
+    int n, int c, int h, int w, int k, int r, int s, int p, int q, int u, int v, int dh, int dw)
+{
+    int in,ik,ioh,iow,ic,is,ir;
+    int cur_h, cur_w, o_idx, i_idx, f_idx;
+    int oh = out_size(h, p, dh, r, u);
+    int ow = out_size(w, q, dw, s, v);
+    for(ik=0;ik<k;ik++){
+        for(ic=0;ic<c;ic++){
+            for(ir=0;ir<r;ir++){
+                for(is=0;is<s;is++){
+                    float value = .0f;
+                    f_idx = ik*c*r*s+ic*r*s+ir*s+is;
+                    for(in=0;in<n;in++){
+                        for(ioh=0;ioh<oh;ioh++){
+                            cur_h = u*ioh-p+dh*ir;
+                            if(cur_h<0 || cur_h>=h) continue;
+                            for(iow=0;iow<ow;iow++){
+                                cur_w = v*iow-q+dw*is;
+                                if(cur_w<0||cur_w>=w) continue;
+                                i_idx = in*c*h*w+ic*h*w+cur_h*w+cur_w;
+                                o_idx = in*k*oh*ow+ik*oh*ow+ioh*ow+iow;
+                                value += src[i_idx] * dst_grad[o_idx];
+                            }
+                        }
+                    }
+                    filter_grad[f_idx] = value;
+                    
+                }
+            }
+        }
+    }
+}
+
+void naive_conv_bwd_f_cnhw(const float *src, float *filter_grad, const float *dst_grad,
+    int n, int c, int h, int w, int k, int r, int s, int p, int q, int u, int v, int dh, int dw)
+{
+    int in,ik,ioh,iow,ic,is,ir;
+    int cur_h, cur_w, o_idx, i_idx, f_idx;
+    int oh = out_size(h, p, dh, r, u);
+    int ow = out_size(w, q, dw, s, v);
+    for(ik=0;ik<k;ik++){
+        for(ic=0;ic<c;ic++){
+            for(ir=0;ir<r;ir++){
+                for(is=0;is<s;is++){
+                    float value = .0f;
+                    f_idx = ik*c*r*s+ic*r*s+ir*s+is;
+                    for(in=0;in<n;in++){
+                        for(ioh=0;ioh<oh;ioh++){
+                            cur_h = u*ioh-p+dh*ir;
+                            if(cur_h<0 || cur_h>=h) continue;
+                            for(iow=0;iow<ow;iow++){
+                                cur_w = v*iow-q+dw*is;
+                                if(cur_w<0||cur_w>=w) continue;
+                                i_idx = ic*n*h*w+in*h*w+cur_h*w+cur_w;
+                                o_idx = ik*n*oh*ow+in*oh*ow+ioh*ow+iow;
+                                value += src[i_idx] * dst_grad[o_idx];
+                            }
+                        }
+                    }
+                    filter_grad[f_idx] = value;
+                }
+            }
+        }
+    }
+}
+
 #endif
