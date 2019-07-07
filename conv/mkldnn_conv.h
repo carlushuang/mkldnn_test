@@ -167,4 +167,25 @@ void md_conv_bwd_f_cnhw(md_handle *mh, md_conv_handle *conv, float * src, float 
     delete [] src_nchw;
     delete [] dst_grad_nchw;
 }
+
+#define MKLDNN_CONV_WARP(dir, layout)                                               \
+    void mkldnn_conv_ ## dir ## _ ## layout (float *ts, float *tf, float *td,       \
+    int n, int c, int h, int w, int k, int r, int s, int p, int q, int u, int v, int dh, int dw) \
+    {                                                                               \
+        md_handle md_h;                                                             \
+        md_conv_handle md_conv_h;                                                   \
+        md_init(&md_h);                                                             \
+        md_conv_init(&md_conv_h,n,c,h,w,k,r,s,p,q,u,v,dh,dw);                       \
+        md_conv_## dir ## _ ## layout (&md_h, &md_conv_h, ts, tf, td);              \
+        md_conv_destroy(&md_conv_h);                                                \
+        md_destroy(&md_h);                                                          \
+    }
+
+MKLDNN_CONV_WARP(fwd, nchw)
+MKLDNN_CONV_WARP(fwd, cnhw)
+MKLDNN_CONV_WARP(bwd_d, nchw)
+MKLDNN_CONV_WARP(bwd_d, cnhw)
+MKLDNN_CONV_WARP(bwd_f, nchw)
+MKLDNN_CONV_WARP(bwd_f, cnhw)
+
 #endif
