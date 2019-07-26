@@ -1,16 +1,17 @@
 #include <stdlib.h>
+#include <stdint.h>
 #include <time.h>
 #include <assert.h>
 
-static int out_size(int in_size, int pad, int dilation, int ksize, int stride)
+static int64_t out_size(int64_t in_size, int64_t pad, int64_t dilation, int64_t ksize, int64_t stride)
 {
      return (in_size + 2*pad- dilation*(ksize-1) -1)/stride + 1;
 }
-void nchw_2_cnhw(float *dst, const float * src, int n, int c, int h, int w){
-    int in,ic,i;
-    int off_src, off_dst;
-    int unroll_len = (h*w)/8;
-    int unroll_rem = (h*w)%8;
+void nchw_2_cnhw(float *dst, const float * src, size_t n, size_t c, size_t h, size_t w){
+    size_t in,ic,i;
+    size_t off_src, off_dst;
+    size_t unroll_len = (h*w)/8;
+    size_t unroll_rem = (h*w)%8;
     for(ic=0;ic<c;ic++){
         for(in=0;in<n;in++){
             off_src = in*c*h*w+ic*h*w;
@@ -35,11 +36,11 @@ void nchw_2_cnhw(float *dst, const float * src, int n, int c, int h, int w){
         }
     }
 }
-void cnhw_2_nchw(float *dst, const float * src, int n, int c, int h, int w){
-    int in,ic,i;
-    int off_src, off_dst;
-    int unroll_len = (h*w)/8;
-    int unroll_rem = (h*w)%8;
+void cnhw_2_nchw(float *dst, const float * src, size_t n, size_t c, size_t h, size_t w){
+    size_t in,ic,i;
+    size_t off_src, off_dst;
+    size_t unroll_len = (h*w)/8;
+    size_t unroll_rem = (h*w)%8;
     for(in=0;in<n;in++){
         for(ic=0;ic<c;ic++){
             off_src = ic*n*h*w+in*h*w;
@@ -68,15 +69,15 @@ void cnhw_2_nchw(float *dst, const float * src, int n, int c, int h, int w){
 #include "naive_conv.h"
 
 
-void rand_vector(float * vec, int num){
-    static int inited=0;
-    int i;
+void rand_vector(float * vec, size_t num){
+    static size_t inited=0;
+    size_t i;
     if(!inited){ inited = 1; srand (time(NULL));}
     for(i=0;i<num;i++) vec[i] = ((float)(rand()%1000))/1000.0f;
 }
-int valid_vector(float *lhs, float *rhs, int num, float delta=0.02){
-    int i;
-    int err_cnt=0;
+size_t valid_vector(float *lhs, float *rhs, size_t num, float delta=0.02){
+    size_t i;
+    size_t err_cnt=0;
 #define ABS(x)  ((x>0)?x:(-1*x))
     for(i=0;i<num;i++){
         float d = lhs[i] - rhs[i];
@@ -85,8 +86,8 @@ int valid_vector(float *lhs, float *rhs, int num, float delta=0.02){
     }
     return err_cnt;
 }
-void dump_vector_nchw(float * t, int n, int c, int h, int w){
-    int in,ic,ih,iw;
+void dump_vector_nchw(float * t, size_t n, size_t c, size_t h, size_t w){
+    size_t in,ic,ih,iw;
     for(in=0;in<n;in++){
         for(ic=0;ic<c;ic++){
             for(ih=0;ih<h;ih++){
@@ -100,8 +101,8 @@ void dump_vector_nchw(float * t, int n, int c, int h, int w){
         printf("--------------------------------\n");
     }
 }
-void dump_vector_cnhw(float * t, int n, int c, int h, int w){
-    int in,ic,ih,iw;
+void dump_vector_cnhw(float * t, size_t n, size_t c, size_t h, size_t w){
+    size_t in,ic,ih,iw;
     for(ic=0;ic<c;ic++){
         for(in=0;in<n;in++){
             for(ih=0;ih<h;ih++){
@@ -116,32 +117,32 @@ void dump_vector_cnhw(float * t, int n, int c, int h, int w){
     }
 }
 
-int next_config(int *n, int *c, int *h, int *w, int *k, int *r, int *s, int *p, int *q, int *u, int *v, int *dh, int *dw){
-    int n_arr[] ={1,2,4};
-    int c_arr[] ={3,8,32,96};
-    int wh_arr[]={7,25,55,77,128};
-    int k_arr[] ={4,8,64};
-    int rs_arr[]={1,3,5,7,11};
-    int pq_arr[]={0,1,2,3};
-    int uv_arr[]={1,2,3};
-    int d_arr[] ={1,2,3};
+size_t next_config(size_t *n, size_t *c, size_t *h, size_t *w, size_t *k, size_t *r, size_t *s, size_t *p, size_t *q, size_t *u, size_t *v, size_t *dh, size_t *dw){
+    size_t n_arr[] ={1,2,4};
+    size_t c_arr[] ={3,8,32,96};
+    size_t wh_arr[]={7,25,55,77,128};
+    size_t k_arr[] ={4,8,64};
+    size_t rs_arr[]={1,3,5,7,11};
+    size_t pq_arr[]={0,1,2,3};
+    size_t uv_arr[]={1,2,3};
+    size_t d_arr[] ={1,2,3};
     
-    static int have_next=1;
-    static int in=0;
-    static int ic=0;
-    static int iwh=0;
-    static int ik=0;
-    static int irs=0;
-    static int ipq=0;
-    static int iuv=0;
-    static int id=0;
-    int need_restart = 0;
+    static size_t have_next=1;
+    static size_t in=0;
+    static size_t ic=0;
+    static size_t iwh=0;
+    static size_t ik=0;
+    static size_t irs=0;
+    static size_t ipq=0;
+    static size_t iuv=0;
+    static size_t id=0;
+    size_t need_restart = 0;
 
     if(!have_next)
         return 0;
 
 restart:
-    if(out_size(wh_arr[iwh], pq_arr[ipq], d_arr[id], rs_arr[irs],uv_arr[iuv])<=0){
+    if(out_size((int64_t)wh_arr[iwh],(int64_t) pq_arr[ipq], (int64_t)d_arr[id], (int64_t)rs_arr[irs],(int64_t)uv_arr[iuv])<=0){
         need_restart = 1;
         goto next_cfg;
     }
@@ -186,28 +187,28 @@ next_cfg:
 }
 
 int main(){
-    int n;
-    int c;
-    int h;
-    int w;
-    int k;
-    int r;
-    int s;
-    int p;
-    int q;
-    int u;
-    int v;
-    int dh ;
-    int dw ;
-    int oh;
-    int ow;
+    size_t n;
+    size_t c;
+    size_t h;
+    size_t w;
+    size_t k;
+    size_t r;
+    size_t s;
+    size_t p;
+    size_t q;
+    size_t u;
+    size_t v;
+    size_t dh ;
+    size_t dw ;
+    size_t oh;
+    size_t ow;
     
     printf(" n  c  h  w  k  r  s  p  q  u  v dh dw oh ow\n");
     while(next_config(&n, &c, &h, &w, &k, &r, &s, &p, &q, &u, &v, &dh, &dw)){
-        int err_cnt;
+        size_t err_cnt;
         oh = out_size(h, p, dh, r, u);
         ow = out_size(w, q, dw, s, v);
-        printf("%2d %2d %2d %2d %2d %2d %2d %2d %2d %2d %2d %2d %2d %2d %2d ",
+        printf("%2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu ",
             n,c,h,w,k,r,s,p,q,u,v,dh,dw,oh,ow);
             
         float * t_input = new float[n*c*h*w];
@@ -273,7 +274,7 @@ int main(){
         naive_conv_fwd_nchw(t_input, t_filter, t_out_2, n,c,h,w,k,r,s,p,q,u,v,dh,dw);
         //md_conv_fwd_cnhw(&md_h, &md_conv_h, t_input, t_filter, t_out);
         //naive_conv_fwd_cnhw(t_input, t_filter, t_out_2, n,c,h,w,k,r,s,p,q,u,v,dh,dw);
-        int err_cnt=valid_vector(t_out, t_out_2, n*k*oh*ow);
+        size_t err_cnt=valid_vector(t_out, t_out_2, n*k*oh*ow);
         printf("fwd %s\n",err_cnt==0?"ok":"fail");
 
         md_conv_destroy(&md_conv_h);
@@ -309,7 +310,7 @@ int main(){
         //naive_conv_bwd_d_nchw(t_input_grad_2, t_filter, t_out_grad, n,c,h,w,k,r,s,p,q,u,v,dh,dw);
         md_conv_bwd_d_cnhw(&md_h, &md_conv_h, t_input_grad, t_filter, t_out_grad);
         naive_conv_bwd_d_cnhw(t_input_grad_2, t_filter, t_out_grad, n,c,h,w,k,r,s,p,q,u,v,dh,dw);
-        int err_cnt=valid_vector(t_input_grad, t_input_grad_2, n*c*h*w);
+        size_t err_cnt=valid_vector(t_input_grad, t_input_grad_2, n*c*h*w);
         printf("bwd_d %s\n",err_cnt==0?"ok":"fail");
         
         md_conv_destroy(&md_conv_h);
@@ -347,7 +348,7 @@ int main(){
         //md_conv_bwd_f_cnhw(&md_h, &md_conv_h, t_input, t_filter_grad, t_out_grad);
         mkldnn_conv_bwd_f_cnhw(t_input, t_filter_grad, t_out_grad, n,c,h,w,k,r,s,p,q,u,v,dh,dw);
         naive_conv_bwd_f_cnhw(t_input, t_filter_grad_2, t_out_grad, n,c,h,w,k,r,s,p,q,u,v,dh,dw);
-        int err_cnt=valid_vector(t_filter_grad, t_filter_grad_2, k*c*r*s, 0.03);
+        size_t err_cnt=valid_vector(t_filter_grad, t_filter_grad_2, k*c*r*s, 0.03);
         printf("bwd_f %s\n",err_cnt==0?"ok":"fail");
 
         //md_conv_destroy(&md_conv_h);

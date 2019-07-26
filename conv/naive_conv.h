@@ -1,12 +1,12 @@
 #ifndef __NAIVE_CONV_H
 #define __NAIVE_CONV_H
 void naive_conv_fwd_nchw(const float *src, const float *filter, float *dst,
-    int n, int c, int h, int w, int k, int r, int s, int p, int q, int u, int v, int dh, int dw)
+    size_t n, size_t c, size_t h, size_t w, size_t k, size_t r, size_t s, size_t p, size_t q, size_t u, size_t v, size_t dh, size_t dw)
 {
-    int in,ik,ioh,iow,ic,is,ir;
-    int cur_h, cur_w, o_idx, i_idx, f_idx;
-    int oh = out_size(h, p, dh, r, u);
-    int ow = out_size(w, q, dw, s, v);
+    size_t in,ik,ioh,iow,ic,is,ir;
+    size_t cur_h, cur_w, o_idx, i_idx, f_idx;
+    size_t oh = out_size(h, p, dh, r, u);
+    size_t ow = out_size(w, q, dw, s, v);
     for(in=0;in<n;in++){
         for(ik=0;ik<k;ik++){
             for(ioh=0;ioh<oh;ioh++){
@@ -34,12 +34,12 @@ void naive_conv_fwd_nchw(const float *src, const float *filter, float *dst,
     }
 }
 void naive_conv_fwd_cnhw(const float *src, const float *filter, float *dst,
-    int n, int c, int h, int w, int k, int r, int s, int p, int q, int u, int v, int dh, int dw)
+    size_t n, size_t c, size_t h, size_t w, size_t k, size_t r, size_t s, size_t p, size_t q, size_t u, size_t v, size_t dh, size_t dw)
 {
-    int in,ik,ioh,iow,ic,is,ir;
-    int cur_h, cur_w, o_idx, i_idx, f_idx;
-    int oh = out_size(h, p, dh, r, u);
-    int ow = out_size(w, q, dw, s, v);
+    size_t in,ik,ioh,iow,ic,is,ir;
+    size_t cur_h, cur_w, o_idx, i_idx, f_idx;
+    size_t oh = out_size(h, p, dh, r, u);
+    size_t ow = out_size(w, q, dw, s, v);
     for(ik=0;ik<k;ik++){
         for(in=0;in<n;in++){
             for(ioh=0;ioh<oh;ioh++){
@@ -61,19 +61,19 @@ void naive_conv_fwd_cnhw(const float *src, const float *filter, float *dst,
                         }
                     }
                     dst[o_idx] = value;
-                    //printf("o)idx:%d, value:%f\n",o_idx, value);
+                    //prsize_tf("o)idx:%d, value:%f\n",o_idx, value);
                 }
             }
         }
     }
 }
 void naive_conv_bwd_d_nchw(float *src_grad, const float *filter, const float *dst_grad,
-    int n, int c, int h, int w, int k, int r, int s, int p, int q, int u, int v, int dh, int dw)
+    size_t n, size_t c, size_t h, size_t w, size_t k, size_t r, size_t s, size_t p, size_t q, size_t u, size_t v, size_t dh, size_t dw)
 {
-    int in,ik,ih,iw,ic,is,ir;
-    int cur_oh, cur_ow, o_idx, i_idx, f_idx;
-    int oh = out_size(h, p, dh, r, u);
-    int ow = out_size(w, q, dw, s, v);
+    size_t in,ik,ih,iw,ic,is,ir;
+    size_t cur_oh, cur_ow, o_idx, i_idx, f_idx;
+    size_t oh = out_size(h, p, dh, r, u);
+    size_t ow = out_size(w, q, dw, s, v);
     for(in=0;in<n;in++){
         for(ic=0;ic<c;ic++){
             for(ih=0;ih<h;ih++){
@@ -106,12 +106,12 @@ void naive_conv_bwd_d_nchw(float *src_grad, const float *filter, const float *ds
     }
 }
 void naive_conv_bwd_d_cnhw(float *src_grad, const float *filter, const float *dst_grad,
-    int n, int c, int h, int w, int k, int r, int s, int p, int q, int u, int v, int dh, int dw)
+    size_t n, size_t c, size_t h, size_t w, size_t k, size_t r, size_t s, size_t p, size_t q, size_t u, size_t v, size_t dh, size_t dw)
 {
-    int in,ik,ih,iw,ic,is,ir;
-    int cur_oh, cur_ow, o_idx, i_idx, f_idx;
-    int oh = out_size(h, p, dh, r, u);
-    int ow = out_size(w, q, dw, s, v);
+    size_t in,ik,ih,iw,ic,is,ir;
+    size_t cur_oh, cur_ow, o_idx, i_idx, f_idx;
+    size_t oh = out_size(h, p, dh, r, u);
+    size_t ow = out_size(w, q, dw, s, v);
     for(ic=0;ic<c;ic++){
         for(in=0;in<n;in++){
             for(ih=0;ih<h;ih++){
@@ -145,12 +145,12 @@ void naive_conv_bwd_d_cnhw(float *src_grad, const float *filter, const float *ds
 }
 
 void naive_conv_bwd_f_nchw(const float *src, float *filter_grad, const float *dst_grad,
-    int n, int c, int h, int w, int k, int r, int s, int p, int q, int u, int v, int dh, int dw)
+    size_t n, size_t c, size_t h, size_t w, size_t k, size_t r, size_t s, size_t p, size_t q, size_t u, size_t v, size_t dh, size_t dw)
 {
-    int in,ik,ioh,iow,ic,is,ir;
-    int cur_h, cur_w, o_idx, i_idx, f_idx;
-    int oh = out_size(h, p, dh, r, u);
-    int ow = out_size(w, q, dw, s, v);
+    size_t in,ik,ioh,iow,ic,is,ir;
+    size_t cur_h, cur_w, o_idx, i_idx, f_idx;
+    size_t oh = out_size(h, p, dh, r, u);
+    size_t ow = out_size(w, q, dw, s, v);
     for(ik=0;ik<k;ik++){
         for(ic=0;ic<c;ic++){
             for(ir=0;ir<r;ir++){
@@ -179,12 +179,12 @@ void naive_conv_bwd_f_nchw(const float *src, float *filter_grad, const float *ds
 }
 
 void naive_conv_bwd_f_cnhw(const float *src, float *filter_grad, const float *dst_grad,
-    int n, int c, int h, int w, int k, int r, int s, int p, int q, int u, int v, int dh, int dw)
+    size_t n, size_t c, size_t h, size_t w, size_t k, size_t r, size_t s, size_t p, size_t q, size_t u, size_t v, size_t dh, size_t dw)
 {
-    int in,ik,ioh,iow,ic,is,ir;
-    int cur_h, cur_w, o_idx, i_idx, f_idx;
-    int oh = out_size(h, p, dh, r, u);
-    int ow = out_size(w, q, dw, s, v);
+    size_t in,ik,ioh,iow,ic,is,ir;
+    size_t cur_h, cur_w, o_idx, i_idx, f_idx;
+    size_t oh = out_size(h, p, dh, r, u);
+    size_t ow = out_size(w, q, dw, s, v);
     for(ik=0;ik<k;ik++){
         for(ic=0;ic<c;ic++){
             for(ir=0;ir<r;ir++){

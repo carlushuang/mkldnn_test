@@ -7,22 +7,22 @@ typedef struct {
     mkldnn::engine * eng;
 }md_handle;
 typedef struct{
-    int n; // batch
-    int c;
-    int h;
-    int w;
-    int k;
-    int r; // filter_h
-    int s; // filter_w
-    int p; // pad h
-    int q; // pad w
-    int u; // stride h
-    int v; // stride w
-    int dh; // dilation h
-    int dw; // dilation w
+    size_t n; // batch
+    size_t c;
+    size_t h;
+    size_t w;
+    size_t k;
+    size_t r; // filter_h
+    size_t s; // filter_w
+    size_t p; // pad h
+    size_t q; // pad w
+    size_t u; // stride h
+    size_t v; // stride w
+    size_t dh; // dilation h
+    size_t dw; // dilation w
 
-    int oh;
-    int ow;
+    size_t oh;
+    size_t ow;
 
     mkldnn::memory::desc *src_desc;
     mkldnn::memory::desc *filter_desc;
@@ -42,7 +42,7 @@ void md_destroy(md_handle * mh){
     delete mh->eng;
 }
 
-void md_conv_init(md_conv_handle *conv,int n, int c, int h, int w, int k, int r, int s, int p, int q, int u, int v, int dh, int dw){
+void md_conv_init(md_conv_handle *conv,size_t n, size_t c, size_t h, size_t w, size_t k, size_t r, size_t s, size_t p, size_t q, size_t u, size_t v, size_t dh, size_t dw){
     conv->n = n;
     conv->c = c;
     conv->h = h;
@@ -64,7 +64,7 @@ void md_conv_init(md_conv_handle *conv,int n, int c, int h, int w, int k, int r,
     conv->dst_desc = new mkldnn::memory::desc({n,k,conv->oh,conv->ow}, mkldnn::memory::data_type::f32, mkldnn::memory::format::nchw);
 
 
-    conv->fwd_desc = new mkldnn::convolution_forward::desc(mkldnn::prop_kind::forward_inference,
+    conv->fwd_desc = new mkldnn::convolution_forward::desc(mkldnn::prop_kind::forward,
                         mkldnn::algorithm::convolution_direct,
                         *conv->src_desc,*conv->filter_desc,*conv->dst_desc,
                         {u,v},{dh-1,dw-1},{p,q},{p,q},mkldnn::padding_kind::zero);
@@ -94,13 +94,13 @@ void md_conv_fwd_nchw(md_handle *mh, md_conv_handle *conv, float * src, float * 
 }
 
 void md_conv_fwd_cnhw(md_handle *mh, md_conv_handle *conv, float * src, float * filter, float * dst){
-    int n = conv->src_desc->data.dims[0];
-    int c = conv->src_desc->data.dims[1];
-    int h = conv->src_desc->data.dims[2];
-    int w = conv->src_desc->data.dims[3];
-    int k = conv->dst_desc->data.dims[1];
-    int oh = conv->dst_desc->data.dims[2];
-    int ow = conv->dst_desc->data.dims[3];
+    size_t n = conv->src_desc->data.dims[0];
+    size_t c = conv->src_desc->data.dims[1];
+    size_t h = conv->src_desc->data.dims[2];
+    size_t w = conv->src_desc->data.dims[3];
+    size_t k = conv->dst_desc->data.dims[1];
+    size_t oh = conv->dst_desc->data.dims[2];
+    size_t ow = conv->dst_desc->data.dims[3];
     float * src_nchw = new float[n*c*h*w];
     float * dst_nchw = new float[n*k*oh*ow];
     cnhw_2_nchw(src_nchw, src, n, c, h, w);
@@ -121,13 +121,13 @@ void md_conv_bwd_d_nchw(md_handle *mh, md_conv_handle *conv, float * src_grad, f
     mkldnn::stream(mkldnn::stream::kind::eager).submit({conv_bwd_d}).wait();
 }
 void md_conv_bwd_d_cnhw(md_handle *mh, md_conv_handle *conv, float * src_grad, float * filter, float * dst_grad){
-    int n = conv->src_desc->data.dims[0];
-    int c = conv->src_desc->data.dims[1];
-    int h = conv->src_desc->data.dims[2];
-    int w = conv->src_desc->data.dims[3];
-    int k = conv->dst_desc->data.dims[1];
-    int oh = conv->dst_desc->data.dims[2];
-    int ow = conv->dst_desc->data.dims[3];
+    size_t n = conv->src_desc->data.dims[0];
+    size_t c = conv->src_desc->data.dims[1];
+    size_t h = conv->src_desc->data.dims[2];
+    size_t w = conv->src_desc->data.dims[3];
+    size_t k = conv->dst_desc->data.dims[1];
+    size_t oh = conv->dst_desc->data.dims[2];
+    size_t ow = conv->dst_desc->data.dims[3];
     float * src_grad_nchw = new float[n*c*h*w];
     float * dst_grad_nchw = new float[n*k*oh*ow];
     cnhw_2_nchw(dst_grad_nchw, dst_grad, n, k, oh, ow);
@@ -148,13 +148,13 @@ void md_conv_bwd_f_nchw(md_handle *mh, md_conv_handle *conv, float * src, float 
     mkldnn::stream(mkldnn::stream::kind::eager).submit({conv_bwd_f}).wait();
 }
 void md_conv_bwd_f_cnhw(md_handle *mh, md_conv_handle *conv, float * src, float * filter_grad, float * dst_grad){
-    int n = conv->src_desc->data.dims[0];
-    int c = conv->src_desc->data.dims[1];
-    int h = conv->src_desc->data.dims[2];
-    int w = conv->src_desc->data.dims[3];
-    int k = conv->dst_desc->data.dims[1];
-    int oh = conv->dst_desc->data.dims[2];
-    int ow = conv->dst_desc->data.dims[3];
+    size_t n = conv->src_desc->data.dims[0];
+    size_t c = conv->src_desc->data.dims[1];
+    size_t h = conv->src_desc->data.dims[2];
+    size_t w = conv->src_desc->data.dims[3];
+    size_t k = conv->dst_desc->data.dims[1];
+    size_t oh = conv->dst_desc->data.dims[2];
+    size_t ow = conv->dst_desc->data.dims[3];
     float * src_nchw = new float[n*c*h*w];
     float * dst_grad_nchw = new float[n*k*oh*ow];
     cnhw_2_nchw(dst_grad_nchw, dst_grad, n, k, oh, ow);
@@ -170,7 +170,7 @@ void md_conv_bwd_f_cnhw(md_handle *mh, md_conv_handle *conv, float * src, float 
 
 #define MKLDNN_CONV_WARP(dir, layout)                                               \
     void mkldnn_conv_ ## dir ## _ ## layout (float *ts, float *tf, float *td,       \
-    int n, int c, int h, int w, int k, int r, int s, int p, int q, int u, int v, int dh, int dw) \
+    size_t n, size_t c, size_t h, size_t w, size_t k, size_t r, size_t s, size_t p, size_t q, size_t u, size_t v, size_t dh, size_t dw) \
     {                                                                               \
         md_handle md_h;                                                             \
         md_conv_handle md_conv_h;                                                   \
