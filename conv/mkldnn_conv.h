@@ -104,7 +104,7 @@ static inline void md_destroy(md_handle * mh){
     delete mh->eng;
 }
 
-static inline void md_conv_init(md_conv_handle *conv,size_t n, size_t c, size_t h, size_t w, size_t k, size_t fy, size_t fx, size_t py, size_t px, size_t sy, size_t sx, size_t dy, size_t dx){
+static inline void md_conv_init(md_conv_handle *conv,size_t n, size_t w, size_t h, size_t c, size_t k, size_t fx, size_t fy, size_t px, size_t py, size_t sx, size_t sy, size_t dx, size_t dy){
     conv->n = n;
     conv->c = c;
     conv->h = h;
@@ -231,13 +231,13 @@ static inline void md_conv_bwd_f_cnhw(md_handle *mh, md_conv_handle *conv, float
 }
 
 #define MKLDNN_CONV_WARP(dir, layout)                                               \
-    static inline void mkldnn_conv_ ## dir ## _ ## layout (float *ts, float *tf, float *td,       \
-    size_t n, size_t c, size_t h, size_t w, size_t k, size_t fy, size_t fx, size_t py, size_t px, size_t sy, size_t sx, size_t dy, size_t dx) \
+    static inline void mkldnn_conv_ ## dir ## _ ## layout (float *ts, float *tf, float *td, \
+    size_t n, size_t w, size_t h, size_t c, size_t k, size_t fx, size_t fy, size_t px, size_t py, size_t sx, size_t sy, size_t dx, size_t dy) \
     {                                                                               \
         md_handle md_h;                                                             \
         md_conv_handle md_conv_h;                                                   \
         md_init(&md_h);                                                             \
-        md_conv_init(&md_conv_h,n,c,h,w,k,fy,fx,py,px,sy,sx,dy,dx);                       \
+        md_conv_init(&md_conv_h,n,w,h,c,k,fx,fy,px,py,sx,sy,dx,dy);                 \
         md_conv_## dir ## _ ## layout (&md_h, &md_conv_h, ts, tf, td);              \
         md_conv_destroy(&md_conv_h);                                                \
         md_destroy(&md_h);                                                          \

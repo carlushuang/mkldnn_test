@@ -5,7 +5,7 @@ static inline size_t naive_conv_out_size(size_t in_size, size_t pad, size_t dila
      return (in_size + 2*pad- dilation*(ksize-1) -1)/stride + 1;
 }
 static inline void naive_conv_fwd_nchw(const float *src, const float *filter, float *dst,
-    size_t n, size_t c, size_t h, size_t w, size_t k, size_t fy, size_t fx, size_t py, size_t px, size_t sy, size_t sx, size_t dy, size_t dx)
+    size_t n, size_t w, size_t h, size_t c, size_t k, size_t fx, size_t fy, size_t px, size_t py, size_t sx, size_t sy, size_t dx, size_t dy)
 {
     size_t in,ik,ioh,iow,ic,is,ir;
     size_t cur_h, cur_w, o_idx, i_idx, f_idx;
@@ -38,7 +38,7 @@ static inline void naive_conv_fwd_nchw(const float *src, const float *filter, fl
     }
 }
 static inline void naive_conv_fwd_cnhw(const float *src, const float *filter, float *dst,
-    size_t n, size_t c, size_t h, size_t w, size_t k, size_t fy, size_t fx, size_t py, size_t px, size_t sy, size_t sx, size_t dy, size_t dx)
+    size_t n, size_t w, size_t h, size_t c, size_t k, size_t fx, size_t fy, size_t px, size_t py, size_t sx, size_t sy, size_t dx, size_t dy)
 {
     size_t in,ik,ioh,iow,ic,is,ir;
     size_t cur_h, cur_w, o_idx, i_idx, f_idx;
@@ -72,7 +72,7 @@ static inline void naive_conv_fwd_cnhw(const float *src, const float *filter, fl
     }
 }
 static inline void naive_conv_bwd_d_nchw(float *src_grad, const float *filter, const float *dst_grad,
-    size_t n, size_t c, size_t h, size_t w, size_t k, size_t fy, size_t fx, size_t py, size_t px, size_t sy, size_t sx, size_t dy, size_t dx)
+    size_t n, size_t w, size_t h, size_t c, size_t k, size_t fx, size_t fy, size_t px, size_t py, size_t sx, size_t sy, size_t dx, size_t dy)
 {
     size_t in,ik,ih,iw,ic,is,ir;
     size_t cur_oh, cur_ow, o_idx, i_idx, f_idx;
@@ -110,7 +110,7 @@ static inline void naive_conv_bwd_d_nchw(float *src_grad, const float *filter, c
     }
 }
 static inline void naive_conv_bwd_d_cnhw(float *src_grad, const float *filter, const float *dst_grad,
-    size_t n, size_t c, size_t h, size_t w, size_t k, size_t fy, size_t fx, size_t py, size_t px, size_t sy, size_t sx, size_t dy, size_t dx)
+    size_t n, size_t w, size_t h, size_t c, size_t k, size_t fx, size_t fy, size_t px, size_t py, size_t sx, size_t sy, size_t dx, size_t dy)
 {
     size_t in,ik,ih,iw,ic,is,ir;
     size_t cur_oh, cur_ow, o_idx, i_idx, f_idx;
@@ -149,7 +149,7 @@ static inline void naive_conv_bwd_d_cnhw(float *src_grad, const float *filter, c
 }
 
 static inline void naive_conv_bwd_f_nchw(const float *src, float *filter_grad, const float *dst_grad,
-    size_t n, size_t c, size_t h, size_t w, size_t k, size_t fy, size_t fx, size_t py, size_t px, size_t sy, size_t sx, size_t dy, size_t dx)
+    size_t n, size_t w, size_t h, size_t c, size_t k, size_t fx, size_t fy, size_t px, size_t py, size_t sx, size_t sy, size_t dx, size_t dy)
 {
     size_t in,ik,ioh,iow,ic,is,ir;
     size_t cur_h, cur_w, o_idx, i_idx, f_idx;
@@ -183,7 +183,7 @@ static inline void naive_conv_bwd_f_nchw(const float *src, float *filter_grad, c
 }
 
 static inline void naive_conv_bwd_f_cnhw(const float *src, float *filter_grad, const float *dst_grad,
-    size_t n, size_t c, size_t h, size_t w, size_t k, size_t fy, size_t fx, size_t py, size_t px, size_t sy, size_t sx, size_t dy, size_t dx)
+    size_t n, size_t w, size_t h, size_t c, size_t k, size_t fx, size_t fy, size_t px, size_t py, size_t sx, size_t sy, size_t dx, size_t dy)
 {
     size_t in,ik,ioh,iow,ic,is,ir;
     size_t cur_h, cur_w, o_idx, i_idx, f_idx;
