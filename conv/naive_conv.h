@@ -1,12 +1,16 @@
 #ifndef __NAIVE_CONV_H
 #define __NAIVE_CONV_H
-void naive_conv_fwd_nchw(const float *src, const float *filter, float *dst,
-    size_t n, size_t c, size_t h, size_t w, size_t k, size_t r, size_t s, size_t p, size_t q, size_t u, size_t v, size_t dh, size_t dw)
+static inline size_t naive_conv_out_size(size_t in_size, size_t pad, size_t dilation, size_t ksize, size_t stride)
+{
+     return (in_size + 2*pad- dilation*(ksize-1) -1)/stride + 1;
+}
+static inline void naive_conv_fwd_nchw(const float *src, const float *filter, float *dst,
+    size_t n, size_t c, size_t h, size_t w, size_t k, size_t fy, size_t fx, size_t py, size_t px, size_t sy, size_t sx, size_t dy, size_t dx)
 {
     size_t in,ik,ioh,iow,ic,is,ir;
     size_t cur_h, cur_w, o_idx, i_idx, f_idx;
-    size_t oh = out_size(h, p, dh, r, u);
-    size_t ow = out_size(w, q, dw, s, v);
+    size_t oh = naive_conv_out_size(h, py, dy, fy, sy);
+    size_t ow = naive_conv_out_size(w, px, dx, fx, sx);
     for(in=0;in<n;in++){
         for(ik=0;ik<k;ik++){
             for(ioh=0;ioh<oh;ioh++){
@@ -15,14 +19,14 @@ void naive_conv_fwd_nchw(const float *src, const float *filter, float *dst,
                     float value = .0f;
                     o_idx = in*k*oh*ow+ik*oh*ow+ioh*ow+iow;
                     for(ic=0;ic<c;ic++){
-                        for(ir=0;ir<r;ir++){
-                            cur_h = u*ioh-p+dh*ir;
+                        for(ir=0;ir<fy;ir++){
+                            cur_h = sy*ioh-py+dy*ir;
                             if(cur_h<0 || cur_h>=h) continue;
-                            for(is=0;is<s;is++){
-                                cur_w = v*iow-q+dw*is;
+                            for(is=0;is<fx;is++){
+                                cur_w = sx*iow-px+dx*is;
                                 if(cur_w<0 || cur_w>=w) continue;
                                 i_idx = in*c*h*w+ic*h*w+cur_h*w+cur_w;
-                                f_idx = ik*c*r*s+ic*r*s+ir*s+is;
+                                f_idx = ik*c*fy*fx+ic*fy*fx+ir*fx+is;
                                 value += src[i_idx]*filter[f_idx];
                             }
                         }
@@ -33,13 +37,13 @@ void naive_conv_fwd_nchw(const float *src, const float *filter, float *dst,
         }
     }
 }
-void naive_conv_fwd_cnhw(const float *src, const float *filter, float *dst,
-    size_t n, size_t c, size_t h, size_t w, size_t k, size_t r, size_t s, size_t p, size_t q, size_t u, size_t v, size_t dh, size_t dw)
+static inline void naive_conv_fwd_cnhw(const float *src, const float *filter, float *dst,
+    size_t n, size_t c, size_t h, size_t w, size_t k, size_t fy, size_t fx, size_t py, size_t px, size_t sy, size_t sx, size_t dy, size_t dx)
 {
     size_t in,ik,ioh,iow,ic,is,ir;
     size_t cur_h, cur_w, o_idx, i_idx, f_idx;
-    size_t oh = out_size(h, p, dh, r, u);
-    size_t ow = out_size(w, q, dw, s, v);
+    size_t oh = naive_conv_out_size(h, py, dy, fy, sy);
+    size_t ow = naive_conv_out_size(w, px, dx, fx, sx);
     for(ik=0;ik<k;ik++){
         for(in=0;in<n;in++){
             for(ioh=0;ioh<oh;ioh++){
@@ -48,14 +52,14 @@ void naive_conv_fwd_cnhw(const float *src, const float *filter, float *dst,
                     float value = .0f;
                     o_idx = ik*n*oh*ow+in*oh*ow+ioh*ow+iow;
                     for(ic=0;ic<c;ic++){
-                        for(ir=0;ir<r;ir++){
-                            cur_h = u*ioh-p+dh*ir;
+                        for(ir=0;ir<fy;ir++){
+                            cur_h = sy*ioh-py+dy*ir;
                             if(cur_h<0 || cur_h>=h) continue;
-                            for(is=0;is<s;is++){
-                                cur_w = v*iow-q+dw*is;
+                            for(is=0;is<fx;is++){
+                                cur_w = sx*iow-px+dx*is;
                                 if(cur_w<0 || cur_w>=w) continue;
                                 i_idx = ic*n*h*w+in*h*w+cur_h*w+cur_w;
-                                f_idx = ik*c*r*s+ic*r*s+ir*s+is;
+                                f_idx = ik*c*fy*fx+ic*fy*fx+ir*fx+is;
                                 value += src[i_idx]*filter[f_idx];
                             }
                         }
@@ -67,13 +71,13 @@ void naive_conv_fwd_cnhw(const float *src, const float *filter, float *dst,
         }
     }
 }
-void naive_conv_bwd_d_nchw(float *src_grad, const float *filter, const float *dst_grad,
-    size_t n, size_t c, size_t h, size_t w, size_t k, size_t r, size_t s, size_t p, size_t q, size_t u, size_t v, size_t dh, size_t dw)
+static inline void naive_conv_bwd_d_nchw(float *src_grad, const float *filter, const float *dst_grad,
+    size_t n, size_t c, size_t h, size_t w, size_t k, size_t fy, size_t fx, size_t py, size_t px, size_t sy, size_t sx, size_t dy, size_t dx)
 {
     size_t in,ik,ih,iw,ic,is,ir;
     size_t cur_oh, cur_ow, o_idx, i_idx, f_idx;
-    size_t oh = out_size(h, p, dh, r, u);
-    size_t ow = out_size(w, q, dw, s, v);
+    size_t oh = naive_conv_out_size(h, py, dy, fy, sy);
+    size_t ow = naive_conv_out_size(w, px, dx, fx, sx);
     for(in=0;in<n;in++){
         for(ic=0;ic<c;ic++){
             for(ih=0;ih<h;ih++){
@@ -81,19 +85,19 @@ void naive_conv_bwd_d_nchw(float *src_grad, const float *filter, const float *ds
                     float value = .0f;
                     i_idx = in*c*h*w+ic*h*w+ih*w+iw;
                     for(ik=0;ik<k;ik++){
-                        for(ir=0;ir<r;ir++){
-                            cur_oh = ih+p-dh*ir; // cur_h = u*ioh-p+dh*ir;
-                            if(cur_oh<0 || cur_oh % u) continue;
-                            cur_oh/=u;
+                        for(ir=0;ir<fy;ir++){
+                            cur_oh = ih+py-dy*ir; // cur_h = sy*ioh-py+dy*ir;
+                            if(cur_oh<0 || cur_oh % sy) continue;
+                            cur_oh/=sy;
                             if(cur_oh>=oh) continue;
-                            for(is=0;is<s;is++){
-                                cur_ow = iw+q-dw*is;  // cur_w = v*iow-q+dw*is;
-                                if(cur_ow<0 || cur_ow %v) continue;
-                                cur_ow /= v;
+                            for(is=0;is<fx;is++){
+                                cur_ow = iw+px-dx*is;  // cur_w = sx*iow-px+dx*is;
+                                if(cur_ow<0 || cur_ow %sx) continue;
+                                cur_ow /= sx;
                                 if(cur_ow>=ow) continue;
                                 
                                 o_idx = in*k*oh*ow+ik*oh*ow+cur_oh*ow+cur_ow;
-                                f_idx = ik*c*r*s+ic*r*s+ir*s+is;
+                                f_idx = ik*c*fy*fx+ic*fy*fx+ir*fx+is;
                                 
                                 value += dst_grad[o_idx]*filter[f_idx];
                             }
@@ -105,13 +109,13 @@ void naive_conv_bwd_d_nchw(float *src_grad, const float *filter, const float *ds
         }
     }
 }
-void naive_conv_bwd_d_cnhw(float *src_grad, const float *filter, const float *dst_grad,
-    size_t n, size_t c, size_t h, size_t w, size_t k, size_t r, size_t s, size_t p, size_t q, size_t u, size_t v, size_t dh, size_t dw)
+static inline void naive_conv_bwd_d_cnhw(float *src_grad, const float *filter, const float *dst_grad,
+    size_t n, size_t c, size_t h, size_t w, size_t k, size_t fy, size_t fx, size_t py, size_t px, size_t sy, size_t sx, size_t dy, size_t dx)
 {
     size_t in,ik,ih,iw,ic,is,ir;
     size_t cur_oh, cur_ow, o_idx, i_idx, f_idx;
-    size_t oh = out_size(h, p, dh, r, u);
-    size_t ow = out_size(w, q, dw, s, v);
+    size_t oh = naive_conv_out_size(h, py, dy, fy, sy);
+    size_t ow = naive_conv_out_size(w, px, dx, fx, sx);
     for(ic=0;ic<c;ic++){
         for(in=0;in<n;in++){
             for(ih=0;ih<h;ih++){
@@ -119,19 +123,19 @@ void naive_conv_bwd_d_cnhw(float *src_grad, const float *filter, const float *ds
                     float value = .0f;
                     i_idx = ic*n*h*w+in*h*w+ih*w+iw;
                     for(ik=0;ik<k;ik++){
-                        for(ir=0;ir<r;ir++){
-                            cur_oh = ih+p-dh*ir; // cur_h = u*ioh-p+dh*ir;
-                            if(cur_oh<0 || cur_oh % u) continue;
-                            cur_oh/=u;
+                        for(ir=0;ir<fy;ir++){
+                            cur_oh = ih+py-dy*ir; // cur_h = sy*ioh-py+dy*ir;
+                            if(cur_oh<0 || cur_oh % sy) continue;
+                            cur_oh/=sy;
                             if(cur_oh>=oh) continue;
-                            for(is=0;is<s;is++){
-                                cur_ow = iw+q-dw*is;  // cur_w = v*iow-q+dw*is;
-                                if(cur_ow<0 || cur_ow %v) continue;
-                                cur_ow /= v;
+                            for(is=0;is<fx;is++){
+                                cur_ow = iw+px-dx*is;  // cur_w = sx*iow-px+dx*is;
+                                if(cur_ow<0 || cur_ow %sx) continue;
+                                cur_ow /= sx;
                                 if(cur_ow>=ow) continue;
                                 
                                 o_idx = ik*n*oh*ow+in*oh*ow+cur_oh*ow+cur_ow;
-                                f_idx = ik*c*r*s+ic*r*s+ir*s+is;
+                                f_idx = ik*c*fy*fx+ic*fy*fx+ir*fx+is;
                                 
                                 value += dst_grad[o_idx]*filter[f_idx];
                             }
@@ -144,25 +148,25 @@ void naive_conv_bwd_d_cnhw(float *src_grad, const float *filter, const float *ds
     }
 }
 
-void naive_conv_bwd_f_nchw(const float *src, float *filter_grad, const float *dst_grad,
-    size_t n, size_t c, size_t h, size_t w, size_t k, size_t r, size_t s, size_t p, size_t q, size_t u, size_t v, size_t dh, size_t dw)
+static inline void naive_conv_bwd_f_nchw(const float *src, float *filter_grad, const float *dst_grad,
+    size_t n, size_t c, size_t h, size_t w, size_t k, size_t fy, size_t fx, size_t py, size_t px, size_t sy, size_t sx, size_t dy, size_t dx)
 {
     size_t in,ik,ioh,iow,ic,is,ir;
     size_t cur_h, cur_w, o_idx, i_idx, f_idx;
-    size_t oh = out_size(h, p, dh, r, u);
-    size_t ow = out_size(w, q, dw, s, v);
+    size_t oh = naive_conv_out_size(h, py, dy, fy, sy);
+    size_t ow = naive_conv_out_size(w, px, dx, fx, sx);
     for(ik=0;ik<k;ik++){
         for(ic=0;ic<c;ic++){
-            for(ir=0;ir<r;ir++){
-                for(is=0;is<s;is++){
+            for(ir=0;ir<fy;ir++){
+                for(is=0;is<fx;is++){
                     float value = .0f;
-                    f_idx = ik*c*r*s+ic*r*s+ir*s+is;
+                    f_idx = ik*c*fy*fx+ic*fy*fx+ir*fx+is;
                     for(in=0;in<n;in++){
                         for(ioh=0;ioh<oh;ioh++){
-                            cur_h = u*ioh-p+dh*ir;
+                            cur_h = sy*ioh-py+dy*ir;
                             if(cur_h<0 || cur_h>=h) continue;
                             for(iow=0;iow<ow;iow++){
-                                cur_w = v*iow-q+dw*is;
+                                cur_w = sx*iow-px+dx*is;
                                 if(cur_w<0||cur_w>=w) continue;
                                 i_idx = in*c*h*w+ic*h*w+cur_h*w+cur_w;
                                 o_idx = in*k*oh*ow+ik*oh*ow+ioh*ow+iow;
@@ -178,25 +182,25 @@ void naive_conv_bwd_f_nchw(const float *src, float *filter_grad, const float *ds
     }
 }
 
-void naive_conv_bwd_f_cnhw(const float *src, float *filter_grad, const float *dst_grad,
-    size_t n, size_t c, size_t h, size_t w, size_t k, size_t r, size_t s, size_t p, size_t q, size_t u, size_t v, size_t dh, size_t dw)
+static inline void naive_conv_bwd_f_cnhw(const float *src, float *filter_grad, const float *dst_grad,
+    size_t n, size_t c, size_t h, size_t w, size_t k, size_t fy, size_t fx, size_t py, size_t px, size_t sy, size_t sx, size_t dy, size_t dx)
 {
     size_t in,ik,ioh,iow,ic,is,ir;
     size_t cur_h, cur_w, o_idx, i_idx, f_idx;
-    size_t oh = out_size(h, p, dh, r, u);
-    size_t ow = out_size(w, q, dw, s, v);
+    size_t oh = naive_conv_out_size(h, py, dy, fy, sy);
+    size_t ow = naive_conv_out_size(w, px, dx, fx, sx);
     for(ik=0;ik<k;ik++){
         for(ic=0;ic<c;ic++){
-            for(ir=0;ir<r;ir++){
-                for(is=0;is<s;is++){
+            for(ir=0;ir<fy;ir++){
+                for(is=0;is<fx;is++){
                     float value = .0f;
-                    f_idx = ik*c*r*s+ic*r*s+ir*s+is;
+                    f_idx = ik*c*fy*fx+ic*fy*fx+ir*fx+is;
                     for(in=0;in<n;in++){
                         for(ioh=0;ioh<oh;ioh++){
-                            cur_h = u*ioh-p+dh*ir;
+                            cur_h = sy*ioh-py+dy*ir;
                             if(cur_h<0 || cur_h>=h) continue;
                             for(iow=0;iow<ow;iow++){
-                                cur_w = v*iow-q+dw*is;
+                                cur_w = sx*iow-px+dx*is;
                                 if(cur_w<0||cur_w>=w) continue;
                                 i_idx = ic*n*h*w+in*h*w+cur_h*w+cur_w;
                                 o_idx = ik*n*oh*ow+in*oh*ow+ioh*ow+iow;
