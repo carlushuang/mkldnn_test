@@ -40,8 +40,8 @@ static size_t valid_vector_rms(float *lhs, float *rhs, size_t num, float thresho
     }
     double rms = sqrt(d/sx);
     printf("(%.12f)",rms);
-    //return rms<threshold?0:1;
-    return 0;
+    return rms<threshold?0:1;
+    //return 0;
 }
 static void dump_vector_nchw(float * t, size_t n, size_t c, size_t h, size_t w){
     size_t in,ic,ih,iw;
