@@ -195,7 +195,7 @@ int main(){
         ow = out_size(shape.w, shape.px, shape.dx, shape.fx, shape.sx);
         printf("%2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu ",
             shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy,ow,oh);
-
+        fflush(stdout);
         float * t_input = new float[shape.n*shape.c*shape.h*shape.w];
         float * t_out = new float[shape.n*shape.k*oh*ow];
         float * t_filter = new float[shape.k*shape.c*shape.fy*shape.fx];
@@ -208,6 +208,7 @@ int main(){
         naive_conv_fwd_nchw(t_input, t_filter, t_ref, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy);
         err_cnt = valid_vector_rms(t_out, t_ref, shape.n*shape.k*oh*ow);
         printf("%s ",(err_cnt==0)?"y":"n");
+        fflush(stdout);
         assert(err_cnt==0 && "fail to validate fwd");
         delete [] t_ref;
 
@@ -219,6 +220,7 @@ int main(){
         naive_conv_bwd_d_nchw(t_ref, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy);
         err_cnt = valid_vector_rms(t_input, t_ref, shape.n*shape.c*shape.h*shape.w);
         printf("%s ",(err_cnt==0)?"y":"n");
+        fflush(stdout);
         assert(err_cnt==0 && "fail to validate bwd_d");
         delete [] t_ref;
 
@@ -230,6 +232,7 @@ int main(){
         naive_conv_bwd_f_nchw(t_input, t_ref, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy);
         err_cnt = valid_vector_rms(t_filter, t_ref, shape.k*shape.c*shape.fy*shape.fx);
         printf("%s ",(err_cnt==0)?"y":"n");
+        fflush(stdout);
         assert(err_cnt==0 && "fail to validate bwd_f");
         delete [] t_ref;
 
@@ -237,5 +240,6 @@ int main(){
         delete [] t_filter;
         delete [] t_out;
         printf("\n");
+        fflush(stdout);
     }
 }
