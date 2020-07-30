@@ -3,8 +3,10 @@
 #include <time.h>
 #include <assert.h>
 
-#include "mkldnn_conv.h"
+// #include "mkldnn_conv.h"
+#include "onednn_conv.h"
 #include "naive_conv.h"
+#include <math.h>
 static size_t out_size(size_t in_size, size_t pad, size_t dilation, size_t ksize, size_t stride)
 {
      return (in_size + 2*pad- dilation*(ksize-1) -1)/stride + 1;
@@ -201,8 +203,9 @@ int main(){
         float * t_ref = new float[shape.n*shape.k*oh*ow];
         rand_vector(t_input, shape.n*shape.c*shape.h*shape.w);
         rand_vector(t_filter, shape.k*shape.c*shape.fy*shape.fx);
-        mkldnn_conv_fwd_cnhw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy);
-        naive_conv_fwd_cnhw(t_input, t_filter, t_ref, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy);
+        //mkldnn_conv_fwd_cnhw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy);
+        onednn_conv_fwd_nchw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy);
+        naive_conv_fwd_nchw(t_input, t_filter, t_ref, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy);
         err_cnt = valid_vector_rms(t_out, t_ref, shape.n*shape.k*oh*ow);
         printf("%s ",(err_cnt==0)?"y":"n");
         assert(err_cnt==0 && "fail to validate fwd");
@@ -211,8 +214,9 @@ int main(){
         t_ref = new float[shape.n*shape.c*shape.h*shape.w];
         rand_vector(t_out, shape.n*shape.k*oh*ow);
         rand_vector(t_filter, shape.k*shape.c*shape.fy*shape.fx);
-        mkldnn_conv_bwd_d_cnhw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy);
-        naive_conv_bwd_d_cnhw(t_ref, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy);
+        //mkldnn_conv_bwd_d_cnhw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy);
+        onednn_conv_bwd_d_nchw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy);
+        naive_conv_bwd_d_nchw(t_ref, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy);
         err_cnt = valid_vector_rms(t_input, t_ref, shape.n*shape.c*shape.h*shape.w);
         printf("%s ",(err_cnt==0)?"y":"n");
         assert(err_cnt==0 && "fail to validate bwd_d");
@@ -221,8 +225,9 @@ int main(){
         t_ref = new float[shape.k*shape.c*shape.fy*shape.fx];
         rand_vector(t_input, shape.n*shape.c*shape.h*shape.w);
         rand_vector(t_out, shape.n*shape.k*oh*ow);
-        mkldnn_conv_bwd_f_cnhw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy);
-        naive_conv_bwd_f_cnhw(t_input, t_ref, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy);
+        //mkldnn_conv_bwd_f_cnhw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy);
+        onednn_conv_bwd_f_nchw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy);
+        naive_conv_bwd_f_nchw(t_input, t_ref, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy);
         err_cnt = valid_vector_rms(t_filter, t_ref, shape.k*shape.c*shape.fy*shape.fx);
         printf("%s ",(err_cnt==0)?"y":"n");
         assert(err_cnt==0 && "fail to validate bwd_f");
