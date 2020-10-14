@@ -95,11 +95,12 @@ typedef struct {
 static size_t next_config(shape_t *shape){
 #if 1
     size_t n_arr[] ={1,2,4};
-    size_t c_arr[] ={3,8,32,96};
-    size_t wh_arr[]={7,25,55,77,128};
-    size_t k_arr[] ={4,8,64};
-    size_t fy_arr[]={1,3,5,7,11};
-    size_t fx_arr[]={1,3,5,7,11};
+    size_t c_arr[] ={3,8,24};
+    size_t g_arr[] ={1,2,4};
+    size_t wh_arr[]={7,25,37};
+    size_t k_arr[] ={4,8,16};
+    size_t fy_arr[]={1,3,5,7};
+    size_t fx_arr[]={1,3,5,7};
     size_t py_arr[]={0,1,2,3};
     size_t px_arr[]={0,1,2,3};
     size_t uv_arr[]={1,2,3};
@@ -108,16 +109,20 @@ static size_t next_config(shape_t *shape){
 #if 0
     size_t n_arr[] ={2};
     size_t c_arr[] ={128};
+    size_t g_arr[] ={2};
     size_t wh_arr[]={17};
     size_t k_arr[] ={128};
-    size_t rs_arr[]={7};
-    size_t pq_arr[]={3};
+    size_t fy_arr[]={1};
+    size_t fx_arr[]={1};
+    size_t py_arr[]={0};
+    size_t px_arr[]={0};
     size_t uv_arr[]={1};
     size_t d_arr[] ={1};
 #endif
     static size_t have_next=1;
     static size_t in=0;
     static size_t ic=0;
+    static size_t ig=0;
     static size_t iwh=0;
     static size_t ik=0;
     static size_t ify=0;
@@ -138,6 +143,8 @@ restart:
         ||  (((int64_t)fx_arr[ifx]-1)<(int64_t)px_arr[ipx])
         ||  (((int64_t)wh_arr[iwh] + 2*(int64_t)py_arr[ipy]- (int64_t)d_arr[id]*((int64_t)fy_arr[ify]-1) -1)<0)
         ||  (((int64_t)wh_arr[iwh] + 2*(int64_t)px_arr[ipx]- (int64_t)d_arr[id]*((int64_t)fx_arr[ifx]-1) -1)<0)
+        ||  ((c_arr[ic] % g_arr[ig] != 0) || (k_arr[ik] % g_arr[ig] != 0) )
+        ||  ((fy_arr[ify] == 5 && fx_arr[ifx] == 7) || (fy_arr[ify] == 7 && fx_arr[ifx] == 5))
     ){
         need_restart = 1;
         goto next_cfg;
@@ -156,7 +163,7 @@ restart:
     shape->sy=uv_arr[iuv];
     shape->dx=d_arr[id];
     shape->dy=d_arr[id];
-    shape->ng=1;
+    shape->ng=g_arr[ig];
 #define ARR_LEN(arr)  (sizeof(arr)/sizeof(arr[0]))
 #define ITR_ELEM(elem)  i##elem++; if (i##elem >=ARR_LEN(elem##_arr) ){ i##elem=0;
 next_cfg:
@@ -168,9 +175,11 @@ next_cfg:
                         ITR_ELEM(fx)
                             ITR_ELEM(k)
                                 ITR_ELEM(wh)
-                                    ITR_ELEM(c)
-                                        ITR_ELEM(n)
-                                            have_next=0;
+                                    ITR_ELEM(g)
+                                        ITR_ELEM(c)
+                                            ITR_ELEM(n)
+                                                have_next=0;
+                                            }
                                         }
                                     }
                                 }
@@ -188,25 +197,24 @@ next_cfg:
 
 int main(){
     shape_t shape;
-    printf(" n  w  y  c  k  fx fy px py sx sy dx dy ow oh| fwd     bwd_d     bwd_f\n");
+    printf(" n  w  y  c  k  fx fy px py sx sy dx dy ow oh ng| fwd     bwd       wrw\n");
     while(next_config(&shape)){
         size_t err_cnt,oh,ow;
         oh = out_size(shape.h, shape.py, shape.dy, shape.fy, shape.sy);
         ow = out_size(shape.w, shape.px, shape.dx, shape.fx, shape.sx);
-        printf("%2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu ",
-            shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy,ow,oh);
+        printf("%2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu",
+            shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy,ow,oh,shape.ng);
         fflush(stdout);
         float * t_input = new float[shape.n*shape.c*shape.h*shape.w];
         float * t_out = new float[shape.n*shape.k*oh*ow];
-        float * t_filter = new float[shape.k*shape.c*shape.fy*shape.fx];
+        float * t_filter = new float[shape.k*shape.c*shape.fy*shape.fx / shape.ng];
 
         float * t_ref = new float[shape.n*shape.k*oh*ow];
         rand_vector(t_input, shape.n*shape.c*shape.h*shape.w);
-        rand_vector(t_filter, shape.k*shape.c*shape.fy*shape.fx);
-        //mkldnn_conv_fwd_cnhw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy);
-        onednn_conv_fwd_nchw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy);
-        naive_conv_fwd_nchw(t_input, t_filter, t_ref, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy);
-        err_cnt = valid_vector_rms(t_out, t_ref, shape.n*shape.k*oh*ow);
+        rand_vector(t_filter, shape.k*shape.c*shape.fy*shape.fx / shape.ng);
+        onednn_conv_fwd_nchw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy,shape.ng);
+        naive_conv_fwd_nchw(t_input, t_filter, t_ref, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy,shape.ng);
+        err_cnt = valid_vector_rms(t_out, t_ref, shape.n*shape.k*oh*ow, 1e-4);
         printf("%s ",(err_cnt==0)?"y":"n");
         fflush(stdout);
         assert(err_cnt==0 && "fail to validate fwd");
@@ -214,23 +222,21 @@ int main(){
 
         t_ref = new float[shape.n*shape.c*shape.h*shape.w];
         rand_vector(t_out, shape.n*shape.k*oh*ow);
-        rand_vector(t_filter, shape.k*shape.c*shape.fy*shape.fx);
-        //mkldnn_conv_bwd_d_cnhw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy);
-        onednn_conv_bwd_d_nchw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy);
-        naive_conv_bwd_d_nchw(t_ref, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy);
-        err_cnt = valid_vector_rms(t_input, t_ref, shape.n*shape.c*shape.h*shape.w);
+        rand_vector(t_filter, shape.k*shape.c*shape.fy*shape.fx/shape.ng);
+        onednn_conv_bwd_nchw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy,shape.ng);
+        naive_conv_bwd_nchw(t_ref, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy,shape.ng);
+        err_cnt = valid_vector_rms(t_input, t_ref, shape.n*shape.c*shape.h*shape.w, 1e-4);
         printf("%s ",(err_cnt==0)?"y":"n");
         fflush(stdout);
         assert(err_cnt==0 && "fail to validate bwd_d");
         delete [] t_ref;
 
-        t_ref = new float[shape.k*shape.c*shape.fy*shape.fx];
+        t_ref = new float[shape.k*shape.c*shape.fy*shape.fx/shape.ng];
         rand_vector(t_input, shape.n*shape.c*shape.h*shape.w);
         rand_vector(t_out, shape.n*shape.k*oh*ow);
-        //mkldnn_conv_bwd_f_cnhw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy);
-        onednn_conv_bwd_f_nchw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy);
-        naive_conv_bwd_f_nchw(t_input, t_ref, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy);
-        err_cnt = valid_vector_rms(t_filter, t_ref, shape.k*shape.c*shape.fy*shape.fx);
+        onednn_conv_wrw_nchw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy,shape.ng);
+        naive_conv_wrw_nchw(t_input, t_ref, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy,shape.ng);
+        err_cnt = valid_vector_rms(t_filter, t_ref, shape.k*shape.c*shape.fy*shape.fx/shape.ng, 1e-4);
         printf("%s ",(err_cnt==0)?"y":"n");
         fflush(stdout);
         assert(err_cnt==0 && "fail to validate bwd_f");

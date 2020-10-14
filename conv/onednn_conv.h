@@ -84,14 +84,15 @@ typedef struct{
     size_t dy;
     size_t ow;
     size_t oh;
+    size_t group;
 
     dnnl::memory::desc *src_desc;
     dnnl::memory::desc *filter_desc;
     dnnl::memory::desc *dst_desc;
 
     dnnl::convolution_forward::desc           *fwd_desc;
-    dnnl::convolution_backward_data::desc     *bwd_d_desc;
-    dnnl::convolution_backward_weights::desc  *bwd_f_desc;
+    dnnl::convolution_backward_data::desc     *bwd_desc;
+    dnnl::convolution_backward_weights::desc  *wrw_desc;
 
     //dnnl::convolution_forward *fwd;
 }onednn_conv_handle;
@@ -131,7 +132,7 @@ inline void write_to_dnnl_memory(void *handle, dnnl::memory &mem) {
 }
 
 
-static inline void onednn_conv_init(onednn_conv_handle *conv,size_t n, size_t w, size_t h, size_t c, size_t k, size_t fx, size_t fy, size_t px, size_t py, size_t sx, size_t sy, size_t dx, size_t dy){
+static inline void onednn_conv_init(onednn_conv_handle *conv,size_t n, size_t w, size_t h, size_t c, size_t k, size_t fx, size_t fy, size_t px, size_t py, size_t sx, size_t sy, size_t dx, size_t dy, size_t group){
     conv->n = n;
     conv->w = w;
     conv->h = h;
@@ -147,9 +148,14 @@ static inline void onednn_conv_init(onednn_conv_handle *conv,size_t n, size_t w,
     conv->dy = dy;
     conv->ow = onednn_conv_out_size(w, px, dx, fx, sx);
     conv->oh = onednn_conv_out_size(h, py, dy, fy, sy);
+    conv->group = group;
+    assert((group >= 1) && (c % group == 0) && (k % group == 0));
 
     conv->src_desc = new dnnl::memory::desc({(int)n,(int)c,(int)h,(int)w}, dnnl::memory::data_type::f32, dnnl::memory::format_tag::nchw);
-    conv->filter_desc = new dnnl::memory::desc({(int)k,(int)c,(int)fy,(int)fx}, dnnl::memory::data_type::f32, dnnl::memory::format_tag::oihw);
+    if(group == 1)
+        conv->filter_desc = new dnnl::memory::desc({(int)k,(int)c,(int)fy,(int)fx}, dnnl::memory::data_type::f32, dnnl::memory::format_tag::oihw);
+    else
+        conv->filter_desc = new dnnl::memory::desc({(int)group,(int)k/group,(int)c/group,(int)fy,(int)fx}, dnnl::memory::data_type::f32, dnnl::memory::format_tag::goihw);
     conv->dst_desc = new dnnl::memory::desc({(int)n,(int)k,(int)conv->oh,(int)conv->ow}, dnnl::memory::data_type::f32, dnnl::memory::format_tag::nchw);
 
     conv->fwd_desc = new dnnl::convolution_forward::desc(dnnl::prop_kind::forward,
@@ -157,11 +163,11 @@ static inline void onednn_conv_init(onednn_conv_handle *conv,size_t n, size_t w,
                         *conv->src_desc,*conv->filter_desc,*conv->dst_desc,
                         {(int)sy,(int)sx},{(int)dy-1,(int)dx-1},{(int)py,(int)px},{(int)py,(int)px});
 
-    conv->bwd_d_desc = new dnnl::convolution_backward_data::desc(dnnl::algorithm::convolution_direct,
+    conv->bwd_desc = new dnnl::convolution_backward_data::desc(dnnl::algorithm::convolution_direct,
                         *conv->src_desc,*conv->filter_desc,*conv->dst_desc,
                         {(int)sy,(int)sx},{(int)dy-1,(int)dx-1},{(int)py,(int)px},{(int)py,(int)px});
     
-    conv->bwd_f_desc = new dnnl::convolution_backward_weights::desc(dnnl::algorithm::convolution_direct,
+    conv->wrw_desc = new dnnl::convolution_backward_weights::desc(dnnl::algorithm::convolution_direct,
                         *conv->src_desc,*conv->filter_desc,*conv->dst_desc,
                         {(int)sy,(int)sx},{(int)dy-1,(int)dx-1},{(int)py,(int)px},{(int)py,(int)px});
 
@@ -171,8 +177,8 @@ static inline void onednn_conv_destroy(onednn_conv_handle * conv){
     delete conv->filter_desc;
     delete conv->dst_desc;
     delete conv->fwd_desc;
-    delete conv->bwd_d_desc;
-    delete conv->bwd_f_desc;
+    delete conv->bwd_desc;
+    delete conv->wrw_desc;
 }
 static inline void onednn_conv_fwd_nchw(onednn_handle *handle, onednn_conv_handle *conv, float * src, float * filter, float * dst){
     auto src_memory = dnnl::memory( *conv->src_desc,*handle->eng);
@@ -202,6 +208,7 @@ static inline void onednn_conv_fwd_cnhw(onednn_handle *handle, onednn_conv_handl
     int ow = conv->dst_desc->data.dims[3];
     float * src_nchw = new float[n*c*h*w];
     float * dst_nchw = new float[n*k*oh*ow];
+    assert(conv->group == 1);
     onednn_conv_cnhw_2_nchw(src_nchw, src, n, c, h, w);
 
     auto stream = dnnl::stream(*handle->eng);
@@ -225,7 +232,7 @@ static inline void onednn_conv_fwd_cnhw(onednn_handle *handle, onednn_conv_handl
     delete [] src_nchw;
     delete [] dst_nchw;
 }
-static inline void onednn_conv_bwd_d_nchw(onednn_handle *handle, onednn_conv_handle *conv, float * src_grad, float * filter, float * dst_grad){
+static inline void onednn_conv_bwd_nchw(onednn_handle *handle, onednn_conv_handle *conv, float * src_grad, float * filter, float * dst_grad){
     auto stream = dnnl::stream(*handle->eng);
 
     auto src_grad_memory = dnnl::memory( *conv->src_desc,*handle->eng);
@@ -235,16 +242,16 @@ static inline void onednn_conv_bwd_d_nchw(onednn_handle *handle, onednn_conv_han
     write_to_dnnl_memory(filter, filter_memory);
     write_to_dnnl_memory(dst_grad, dst_grad_memory);
 
-    dnnl::convolution_backward_data conv_bwd_d({*conv->bwd_d_desc, *handle->eng, {*conv->fwd_desc, *handle->eng}});
+    dnnl::convolution_backward_data conv_bwd({*conv->bwd_desc, *handle->eng, {*conv->fwd_desc, *handle->eng}});
 
-    conv_bwd_d.execute(stream, {{DNNL_ARG_DIFF_SRC, src_grad_memory},
+    conv_bwd.execute(stream, {{DNNL_ARG_DIFF_SRC, src_grad_memory},
                                 {DNNL_ARG_WEIGHTS, filter_memory},
                                 {DNNL_ARG_DIFF_DST, dst_grad_memory}});
     stream.wait();
     read_from_dnnl_memory(src_grad, src_grad_memory);
 
 }
-static inline void onednn_conv_bwd_d_cnhw(onednn_handle *handle, onednn_conv_handle *conv, float * src_grad, float * filter, float * dst_grad){
+static inline void onednn_conv_bwd_cnhw(onednn_handle *handle, onednn_conv_handle *conv, float * src_grad, float * filter, float * dst_grad){
     int n = conv->src_desc->data.dims[0];
     int c = conv->src_desc->data.dims[1];
     int h = conv->src_desc->data.dims[2];
@@ -254,6 +261,7 @@ static inline void onednn_conv_bwd_d_cnhw(onednn_handle *handle, onednn_conv_han
     int ow = conv->dst_desc->data.dims[3];
     float * src_grad_nchw = new float[n*c*h*w];
     float * dst_grad_nchw = new float[n*k*oh*ow];
+    assert(conv->group == 1);
     onednn_conv_cnhw_2_nchw(dst_grad_nchw, dst_grad, n, k, oh, ow);
 
     auto stream = dnnl::stream(*handle->eng);
@@ -265,9 +273,9 @@ static inline void onednn_conv_bwd_d_cnhw(onednn_handle *handle, onednn_conv_han
     write_to_dnnl_memory(filter, filter_memory);
     write_to_dnnl_memory(dst_grad_nchw, dst_grad_memory);
 
-    dnnl::convolution_backward_data conv_bwd_d({*conv->bwd_d_desc, *handle->eng, {*conv->fwd_desc, *handle->eng}});
+    dnnl::convolution_backward_data conv_bwd({*conv->bwd_desc, *handle->eng, {*conv->fwd_desc, *handle->eng}});
 
-    conv_bwd_d.execute(stream, {{DNNL_ARG_DIFF_SRC, src_grad_memory},
+    conv_bwd.execute(stream, {{DNNL_ARG_DIFF_SRC, src_grad_memory},
                                 {DNNL_ARG_WEIGHTS, filter_memory},
                                 {DNNL_ARG_DIFF_DST, dst_grad_memory}});
     stream.wait();
@@ -277,7 +285,7 @@ static inline void onednn_conv_bwd_d_cnhw(onednn_handle *handle, onednn_conv_han
     delete [] src_grad_nchw;
     delete [] dst_grad_nchw;
 }
-static inline void onednn_conv_bwd_f_nchw(onednn_handle *handle, onednn_conv_handle *conv, float * src, float * filter_grad, float * dst_grad){
+static inline void onednn_conv_wrw_nchw(onednn_handle *handle, onednn_conv_handle *conv, float * src, float * filter_grad, float * dst_grad){
 
     auto stream = dnnl::stream(*handle->eng);
 
@@ -288,15 +296,15 @@ static inline void onednn_conv_bwd_f_nchw(onednn_handle *handle, onednn_conv_han
     write_to_dnnl_memory(src, src_memory);
     write_to_dnnl_memory(dst_grad, dst_grad_memory);
 
-    dnnl::convolution_backward_weights conv_bwd_f({*conv->bwd_f_desc, *handle->eng, {*conv->fwd_desc, *handle->eng}});
+    dnnl::convolution_backward_weights conv_wrw({*conv->wrw_desc, *handle->eng, {*conv->fwd_desc, *handle->eng}});
 
-    conv_bwd_f.execute(stream, {{DNNL_ARG_SRC, src_memory},
+    conv_wrw.execute(stream, {{DNNL_ARG_SRC, src_memory},
                                 {DNNL_ARG_DIFF_WEIGHTS, filter_grad_memory},
                                 {DNNL_ARG_DIFF_DST, dst_grad_memory}});
     stream.wait();
     read_from_dnnl_memory(filter_grad, filter_grad_memory);
 }
-static inline void onednn_conv_bwd_f_cnhw(onednn_handle *handle, onednn_conv_handle *conv, float * src, float * filter_grad, float * dst_grad){
+static inline void onednn_conv_wrw_cnhw(onednn_handle *handle, onednn_conv_handle *conv, float * src, float * filter_grad, float * dst_grad){
     int n = conv->src_desc->data.dims[0];
     int c = conv->src_desc->data.dims[1];
     int h = conv->src_desc->data.dims[2];
@@ -306,6 +314,7 @@ static inline void onednn_conv_bwd_f_cnhw(onednn_handle *handle, onednn_conv_han
     int ow = conv->dst_desc->data.dims[3];
     float * src_nchw = new float[n*c*h*w];
     float * dst_grad_nchw = new float[n*k*oh*ow];
+    assert(conv->group == 1);
     onednn_conv_cnhw_2_nchw(dst_grad_nchw, dst_grad, n, k, oh, ow);
     onednn_conv_cnhw_2_nchw(src_nchw, src, n, c, h, w);
 
@@ -318,9 +327,9 @@ static inline void onednn_conv_bwd_f_cnhw(onednn_handle *handle, onednn_conv_han
     write_to_dnnl_memory(src_nchw, src_memory);
     write_to_dnnl_memory(dst_grad_nchw, dst_grad_memory);
 
-    dnnl::convolution_backward_weights conv_bwd_f({*conv->bwd_f_desc, *handle->eng, {*conv->fwd_desc, *handle->eng}});
+    dnnl::convolution_backward_weights conv_wrw({*conv->wrw_desc, *handle->eng, {*conv->fwd_desc, *handle->eng}});
 
-    conv_bwd_f.execute(stream, {{DNNL_ARG_SRC, src_memory},
+    conv_wrw.execute(stream, {{DNNL_ARG_SRC, src_memory},
                                 {DNNL_ARG_DIFF_WEIGHTS, filter_grad_memory},
                                 {DNNL_ARG_DIFF_DST, dst_grad_memory}});
     stream.wait();
@@ -332,23 +341,23 @@ static inline void onednn_conv_bwd_f_cnhw(onednn_handle *handle, onednn_conv_han
 
 #define DNNL_CONV_WARP(dir, layout)                                               \
     static inline void onednn_conv_ ## dir ## _ ## layout (float *ts, float *tf, float *td, \
-    size_t n, size_t w, size_t h, size_t c, size_t k, size_t fx, size_t fy, size_t px, size_t py, size_t sx, size_t sy, size_t dx, size_t dy) \
+    size_t n, size_t w, size_t h, size_t c, size_t k, size_t fx, size_t fy, size_t px, size_t py, size_t sx, size_t sy, size_t dx, size_t dy, size_t group) \
     {                                                                               \
         onednn_handle onednn_h;                                                             \
         onednn_conv_handle onednn_conv_h;                                                   \
         onednn_init(&onednn_h);                                                             \
-        onednn_conv_init(&onednn_conv_h,n,w,h,c,k,fx,fy,px,py,sx,sy,dx,dy);                 \
-        onednn_conv_## dir ## _ ## layout (&onednn_h, &onednn_conv_h, ts, tf, td);              \
+        onednn_conv_init(&onednn_conv_h,n,w,h,c,k,fx,fy,px,py,sx,sy,dx,dy,group);           \
+        onednn_conv_## dir ## _ ## layout (&onednn_h, &onednn_conv_h, ts, tf, td);          \
         onednn_conv_destroy(&onednn_conv_h);                                                \
         onednn_destroy(&onednn_h);                                                          \
     }
 
 DNNL_CONV_WARP(fwd, nchw)
 DNNL_CONV_WARP(fwd, cnhw)
-DNNL_CONV_WARP(bwd_d, nchw)
-DNNL_CONV_WARP(bwd_d, cnhw)
-DNNL_CONV_WARP(bwd_f, nchw)
-DNNL_CONV_WARP(bwd_f, cnhw)
+DNNL_CONV_WARP(bwd, nchw)
+DNNL_CONV_WARP(bwd, cnhw)
+DNNL_CONV_WARP(wrw, nchw)
+DNNL_CONV_WARP(wrw, cnhw)
 
 
 #endif
