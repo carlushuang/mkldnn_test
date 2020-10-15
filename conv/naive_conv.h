@@ -1,7 +1,7 @@
 #ifndef __NAIVE_CONV_H
 #define __NAIVE_CONV_H
 
-// #define NAIVE_CONV_THREADED
+#define NAIVE_CONV_THREADED
 
 #ifdef NAIVE_CONV_THREADED
 // if use threaded conv, need c++11
@@ -9,33 +9,6 @@
 #include <thread>
 #include <vector>
 #include <functional>
-using naive_conv_threadwise_conv_4d_t = std::function<void(size_t,size_t,size_t,size_t)>;
-
-class naive_conv_blockwise_4d_t{
-public:
-    naive_conv_blockwise_4d_t(naive_conv_threadwise_conv_4d_t f):mf(f){}
-    void operator()(size_t thread_id, size_t block_size,
-        size_t d0, size_t d1, size_t d2, size_t d3)
-    {
-        size_t total_length = d0 * d1 * d2 * d3;
-        for(size_t tid = thread_id; tid<total_length ; tid += block_size){
-            size_t id0, id1, id2, id3;
-            get_index_4d(tid, d0, d1, d2, d3, &id0, &id1, &id2, &id3);
-            mf(id0, id1, id2, id3);
-        }
-    }
-private:
-    naive_conv_threadwise_conv_4d_t mf;
-    void get_index_4d(size_t idx, size_t d0, size_t d1, size_t d2, size_t d3,
-                        size_t *id0, size_t *id1, size_t *id2, size_t *id3)
-    {
-        *id3 = idx % d3;
-        *id2 = (idx / d3) % d2;
-        *id1 = (idx / (d2*d3)) % d1;
-        *id0 = idx / (d1*d2*d3);        // TODO ignore final mod
-        (void)d0;
-    }
-};
 
 using naive_conv_threadwise_conv_5d_t = std::function<void(size_t,size_t,size_t,size_t,size_t)>;
 
@@ -66,22 +39,8 @@ private:
     }
 };
 
-#if 0
-static inline void naive_conv_blockwise_in_parallel(naive_conv_threadwise_conv_4d_t f, size_t d0, size_t d1, size_t d2, size_t d3)
-{
-    int num_threads = std::thread::hardware_concurrency();
-    std::vector<std::thread> threads(num_threads);
-    // printf("hw concurrency:%d\n", num_threads);
-    // fflush(stdout);
-    for(size_t tid = 0; tid < num_threads; tid++)
-        threads[tid] = std::thread(naive_conv_blockwise_4d_t(f), tid, num_threads, d0, d1, d2, d3);
-    for(size_t tid = 0; tid < num_threads; tid++)
-        threads[tid].join();
-}
-#endif
-
 template<class blockwise_t, class threadwise_t, class... args_t>
-void naive_conv_blockwise_in_parallel(threadwise_t && thread_func, args_t... && args)
+void naive_conv_blockwise_in_parallel(threadwise_t thread_func, args_t... args)
 {
     int num_threads = std::thread::hardware_concurrency();
     std::vector<std::thread> threads(num_threads);
@@ -118,7 +77,7 @@ static inline void naive_conv_fwd_nchw(const float *src, const float *filter,
     auto conv_one_pixel = [&](size_t ig, size_t in, size_t ik, size_t ioh, size_t iow){
         size_t ic, is, ir, cur_h, cur_w, o_idx, i_idx, f_idx;
         float value = .0f;
-        o_idx = in * k * oh * ow + ig * k_per_block * oh * ow + ik * oh * ow + ioh * ow + iow;
+        o_idx = in * k * oh * ow + ig * k_per_group * oh * ow + ik * oh * ow + ioh * ow + iow;
         for (ic = 0; ic < c_per_group; ic++) {
             for (ir = 0; ir < fy; ir++) {
                 cur_h = sy * ioh - py + dy * ir;
@@ -232,7 +191,7 @@ static inline void naive_conv_bwd_nchw(float *src_grad, const float *filter,
         size_t cur_oh, cur_ow, o_idx, i_idx, f_idx;
         float value = .0f;
         i_idx = in * c * h * w + ig * c_per_group * h * w + ic * h * w + ih * w + iw;
-        for (ik = 0; ik < k_per_block; ik++) {
+        for (ik = 0; ik < k_per_group; ik++) {
             for (ir = 0; ir < fy; ir++) {
                 cur_oh =
                     ih + py - dy * ir; // cur_h = sy*ioh-py+dy*ir;
@@ -250,9 +209,9 @@ static inline void naive_conv_bwd_nchw(float *src_grad, const float *filter,
                     if (cur_ow >= ow)
                         continue;
 
-                    o_idx = in * k * oh * ow + ig * k_per_block * oh * ow + ik * oh * ow + 
+                    o_idx = in * k * oh * ow + ig * k_per_group * oh * ow + ik * oh * ow + 
                             cur_oh * ow + cur_ow;
-                    f_idx = ig * k_per_group * c_per_group * fy * fx + ik * c_per_block * fy * fx + ic * fy * fx +
+                    f_idx = ig * k_per_group * c_per_group * fy * fx + ik * c_per_group * fy * fx + ic * fy * fx +
                             ir * fx + is;
 
                     value += dst_grad[o_idx] * filter[f_idx];
