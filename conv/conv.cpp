@@ -78,18 +78,26 @@ typedef struct {
     size_t n;
     size_t w;
     size_t h;
+    size_t d;
     size_t c;
     size_t k;
     size_t fx;
     size_t fy;
+    size_t fz;
     size_t px;
     size_t py;
+    size_t pz;
     size_t sx;
     size_t sy;
+    size_t sz;
     size_t dx;
     size_t dy;
+    size_t dz;
     size_t ng;
 }shape_t;
+
+#define ARR_LEN(arr)  (sizeof(arr)/sizeof(arr[0]))
+#define ITR_ELEM(elem)  i##elem++; if (i##elem >=ARR_LEN(elem##_arr) ){ i##elem=0;
 
 static size_t next_config(shape_t *shape){
 #if 1
@@ -163,8 +171,7 @@ restart:
     shape->dx=d_arr[id];
     shape->dy=d_arr[id];
     shape->ng=g_arr[ig];
-#define ARR_LEN(arr)  (sizeof(arr)/sizeof(arr[0]))
-#define ITR_ELEM(elem)  i##elem++; if (i##elem >=ARR_LEN(elem##_arr) ){ i##elem=0;
+
 next_cfg:
     ITR_ELEM(d)
         ITR_ELEM(uv)
@@ -194,9 +201,170 @@ next_cfg:
     return 1;
 }
 
+static size_t next_config_conv3d(shape_t *shape){
+#if 1
+    size_t n_arr[] ={1,2,4};
+    size_t c_arr[] ={3,4,16};
+    size_t g_arr[] ={1,2,4};
+    size_t whd_arr[]={7,20,32};
+    size_t k_arr[] ={4,8};
+    size_t fz_arr[]={1,3,5};
+    size_t fy_arr[]={1,3,5};
+    size_t fx_arr[]={1,3,5};
+    size_t pz_arr[]={0,1,2};
+    size_t py_arr[]={0,1,2};
+    size_t px_arr[]={0,1,2};
+    size_t stride_arr[]={1,2,3};
+    size_t dilation_arr[] ={1,2,3};
+#endif
+    static size_t have_next=1;
+    static size_t in=0;
+    static size_t ic=0;
+    static size_t ig=0;
+    static size_t iwhd=0;
+    static size_t ik=0;
+    static size_t ify=0;
+    static size_t ifx=0;
+    static size_t ifz=0;
+    static size_t ipy=0;
+    static size_t ipx=0;
+    static size_t ipz=0;
+    static size_t istride=0;
+    static size_t idilation=0;
+    size_t need_restart = 0;
+
+    if(!have_next)
+        return 0;
+
+restart:
+    if(     ((int64_t)fz_arr[ifz]>(int64_t)whd_arr[iwhd])
+        ||  ((int64_t)fy_arr[ify]>(int64_t)whd_arr[iwhd])
+        ||  ((int64_t)fx_arr[ifx]>(int64_t)whd_arr[iwhd])
+        ||  (((int64_t)fz_arr[ifz]-1)<(int64_t)pz_arr[ipz])
+        ||  (((int64_t)fy_arr[ify]-1)<(int64_t)py_arr[ipy])
+        ||  (((int64_t)fx_arr[ifx]-1)<(int64_t)px_arr[ipx])
+        ||  (((int64_t)whd_arr[iwhd] + 2*(int64_t)pz_arr[ipz]- (int64_t)dilation_arr[idilation]*((int64_t)fz_arr[ifz]-1) -1)<0)
+        ||  (((int64_t)whd_arr[iwhd] + 2*(int64_t)py_arr[ipy]- (int64_t)dilation_arr[idilation]*((int64_t)fy_arr[ify]-1) -1)<0)
+        ||  (((int64_t)whd_arr[iwhd] + 2*(int64_t)px_arr[ipx]- (int64_t)dilation_arr[idilation]*((int64_t)fx_arr[ifx]-1) -1)<0)
+        ||  ((c_arr[ic] % g_arr[ig] != 0) || (k_arr[ik] % g_arr[ig] != 0) )
+    ){
+        need_restart = 1;
+        goto next_cfg;
+    }
+    need_restart= 0;
+    shape->n=n_arr[in];
+    shape->w=whd_arr[iwhd];
+    shape->h=whd_arr[iwhd];
+    shape->d=whd_arr[iwhd];
+    shape->c=c_arr[ic];
+    shape->k=k_arr[ik];
+    shape->fx=fx_arr[ifx];
+    shape->fy=fy_arr[ify];
+    shape->fz=fy_arr[ifz];
+    shape->px=px_arr[ipx];
+    shape->py=py_arr[ipy];
+    shape->pz=pz_arr[ipz];
+    shape->sx=stride_arr[istride];
+    shape->sy=stride_arr[istride];
+    shape->sz=stride_arr[istride];
+    shape->dx=dilation_arr[idilation];
+    shape->dy=dilation_arr[idilation];
+    shape->dz=dilation_arr[idilation];
+    shape->ng=g_arr[ig];
+
+next_cfg:
+    ITR_ELEM(dilation)
+        ITR_ELEM(stride)
+            ITR_ELEM(pz)
+                ITR_ELEM(py)
+                    ITR_ELEM(px)
+                        ITR_ELEM(fz)
+                            ITR_ELEM(fy)
+                                ITR_ELEM(fx)
+                                    ITR_ELEM(k)
+                                        ITR_ELEM(whd)
+                                            ITR_ELEM(g)
+                                                ITR_ELEM(c)
+                                                    ITR_ELEM(n)
+                                                        have_next=0;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if(need_restart)
+        goto restart;
+    return 1;
+}
+
+#define TEST_CONV_3D
+
 int main(){
     shape_t shape;
-    printf(" n  w  y  c  k  fx fy px py sx sy dx dy ow oh ng| fwd     bwd       wrw\n");
+#ifdef TEST_CONV_3D
+    printf(" n  w  h  d  c  k  fx fy fz px py pz sx sy sz dx dy dz ow oh od ng| fwd     bwd       wrw\n");
+    while(next_config_conv3d(&shape)){
+        size_t err_cnt,od,oh,ow;
+        od = out_size(shape.d, shape.pz, shape.dz, shape.fz, shape.sz);
+        oh = out_size(shape.h, shape.py, shape.dy, shape.fy, shape.sy);
+        ow = out_size(shape.w, shape.px, shape.dx, shape.fx, shape.sx);
+        printf("%2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu %2lu",
+            shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,
+            shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,ow,oh,od,shape.ng);
+        fflush(stdout);
+        float * t_input = new float[shape.n*shape.c*shape.d*shape.h*shape.w];
+        float * t_out = new float[shape.n*shape.k*od*oh*ow];
+        float * t_filter = new float[shape.k*shape.c*shape.fz*shape.fy*shape.fx / shape.ng];
+
+        float * t_ref = new float[shape.n*shape.k*od*oh*ow];
+        rand_vector(t_input, shape.n*shape.c*shape.d*shape.h*shape.w);
+        rand_vector(t_filter, shape.k*shape.c*shape.fz*shape.fy*shape.fx / shape.ng);
+        onednn_conv_fwd_ncdhw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
+        naive_conv_fwd_ncdhw(t_input, t_filter, t_ref, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
+        err_cnt = valid_vector_rms(t_out, t_ref, shape.n*shape.k*od*oh*ow, 1e-4);
+        printf("%s ",(err_cnt==0)?"y":"n");
+        fflush(stdout);
+        assert(err_cnt==0 && "fail to validate fwd");
+        delete [] t_ref;
+
+        t_ref = new float[shape.n*shape.c*shape.d*shape.h*shape.w];
+        rand_vector(t_out, shape.n*shape.k*od*oh*ow);
+        rand_vector(t_filter, shape.k*shape.c*shape.fz*shape.fy*shape.fx/shape.ng);
+        onednn_conv_bwd_ncdhw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
+        naive_conv_bwd_ncdhw(t_ref, t_filter, t_out, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
+        err_cnt = valid_vector_rms(t_input, t_ref, shape.n*shape.c*shape.d*shape.h*shape.w, 1e-4);
+        printf("%s ",(err_cnt==0)?"y":"n");
+        fflush(stdout);
+        assert(err_cnt==0 && "fail to validate bwd");
+        delete [] t_ref;
+
+        t_ref = new float[shape.k*shape.c*shape.fz*shape.fy*shape.fx/shape.ng];
+        rand_vector(t_input, shape.n*shape.c*shape.d*shape.h*shape.w);
+        rand_vector(t_out, shape.n*shape.k*od*oh*ow);
+        onednn_conv_wrw_ncdhw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
+        naive_conv_wrw_ncdhw(t_input, t_ref, t_out, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
+        err_cnt = valid_vector_rms(t_filter, t_ref, shape.k*shape.c*shape.fz*shape.fy*shape.fx/shape.ng, 1e-4);
+        printf("%s ",(err_cnt==0)?"y":"n");
+        fflush(stdout);
+        assert(err_cnt==0 && "fail to validate wrw");
+        delete [] t_ref;
+
+        delete [] t_input;
+        delete [] t_filter;
+        delete [] t_out;
+        printf("\n");
+        fflush(stdout);
+    }
+#else
+    printf(" n  w  h  c  k  fx fy px py sx sy dx dy ow oh ng| fwd     bwd       wrw\n");
     while(next_config(&shape)){
         size_t err_cnt,oh,ow;
         oh = out_size(shape.h, shape.py, shape.dy, shape.fy, shape.sy);
@@ -227,7 +395,7 @@ int main(){
         err_cnt = valid_vector_rms(t_input, t_ref, shape.n*shape.c*shape.h*shape.w, 1e-4);
         printf("%s ",(err_cnt==0)?"y":"n");
         fflush(stdout);
-        assert(err_cnt==0 && "fail to validate bwd_d");
+        assert(err_cnt==0 && "fail to validate bwd");
         delete [] t_ref;
 
         t_ref = new float[shape.k*shape.c*shape.fy*shape.fx/shape.ng];
@@ -238,7 +406,7 @@ int main(){
         err_cnt = valid_vector_rms(t_filter, t_ref, shape.k*shape.c*shape.fy*shape.fx/shape.ng, 1e-4);
         printf("%s ",(err_cnt==0)?"y":"n");
         fflush(stdout);
-        assert(err_cnt==0 && "fail to validate bwd_f");
+        assert(err_cnt==0 && "fail to validate wrw");
         delete [] t_ref;
 
         delete [] t_input;
@@ -247,4 +415,5 @@ int main(){
         printf("\n");
         fflush(stdout);
     }
+#endif
 }

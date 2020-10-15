@@ -73,18 +73,24 @@ typedef struct{
     size_t n;
     size_t w;
     size_t h;
+    size_t d;
     size_t c;
     size_t k;
     size_t fx;
     size_t fy;
+    size_t fz;
     size_t px;
     size_t py;
+    size_t pz;
     size_t sx;
     size_t sy;
+    size_t sz;
     size_t dx;
     size_t dy;
+    size_t dz;
     size_t ow;
     size_t oh;
+    size_t od;
     size_t group;
 
     dnnl::memory::desc *src_desc;
@@ -170,6 +176,56 @@ static inline void onednn_conv_init(onednn_conv_handle_t *conv,size_t n, size_t 
                         {TO_DIM_T(sy),TO_DIM_T(sx)},{TO_DIM_T(dy-1),TO_DIM_T(dx-1)},{TO_DIM_T(py),TO_DIM_T(px)},{TO_DIM_T(py),TO_DIM_T(px)});
 
 }
+
+static inline void onednn_conv_init_3d(onednn_conv_handle_t *conv,
+                                        size_t n, size_t w, size_t h, size_t d, size_t c, size_t k,
+                                        size_t fx, size_t fy, size_t fz, size_t px, size_t py, size_t pz,
+                                        size_t sx, size_t sy, size_t sz, size_t dx, size_t dy, size_t dz, size_t group){
+    conv->n = n;
+    conv->w = w;
+    conv->h = h;
+    conv->d = d;
+    conv->c = c;
+    conv->k = k;
+    conv->fx = fx;
+    conv->fy = fy;
+    conv->fz = fz;
+    conv->px = px;
+    conv->py = py;
+    conv->pz = pz;
+    conv->sx = sx;
+    conv->sy = sy;
+    conv->sz = sz;
+    conv->dx = dx;
+    conv->dy = dy;
+    conv->dz = dz;
+    conv->ow = onednn_conv_out_size(w, px, dx, fx, sx);
+    conv->oh = onednn_conv_out_size(h, py, dy, fy, sy);
+    conv->od = onednn_conv_out_size(d, pz, dz, fz, sz);
+    conv->group = group;
+    assert((group >= 1) && (c % group == 0) && (k % group == 0));
+
+    conv->src_desc = new dnnl::memory::desc({TO_DIM_T(n),TO_DIM_T(c),TO_DIM_T(d),TO_DIM_T(h),TO_DIM_T(w)}, dnnl::memory::data_type::f32, dnnl::memory::format_tag::ncdhw);
+    if(group == 1)
+        conv->filter_desc = new dnnl::memory::desc({TO_DIM_T(k),TO_DIM_T(c),TO_DIM_T(fz),TO_DIM_T(fy),TO_DIM_T(fx)}, dnnl::memory::data_type::f32, dnnl::memory::format_tag::oidhw);
+    else
+        conv->filter_desc = new dnnl::memory::desc({TO_DIM_T(group),TO_DIM_T(k/group),TO_DIM_T(c/group),TO_DIM_T(fz),TO_DIM_T(fy),TO_DIM_T(fx)}, dnnl::memory::data_type::f32, dnnl::memory::format_tag::goidhw);
+    conv->dst_desc = new dnnl::memory::desc({TO_DIM_T(n),TO_DIM_T(k),TO_DIM_T(conv->od),TO_DIM_T(conv->oh),TO_DIM_T(conv->ow)}, dnnl::memory::data_type::f32, dnnl::memory::format_tag::ncdhw);
+
+    conv->fwd_desc = new dnnl::convolution_forward::desc(dnnl::prop_kind::forward,
+                        dnnl::algorithm::convolution_direct,
+                        *conv->src_desc,*conv->filter_desc,*conv->dst_desc,
+                        {TO_DIM_T(sz),TO_DIM_T(sy),TO_DIM_T(sx)},{TO_DIM_T(dz-1),TO_DIM_T(dy-1),TO_DIM_T(dx-1)},{TO_DIM_T(pz),TO_DIM_T(py),TO_DIM_T(px)},{TO_DIM_T(pz),TO_DIM_T(py),TO_DIM_T(px)});
+
+    conv->bwd_desc = new dnnl::convolution_backward_data::desc(dnnl::algorithm::convolution_direct,
+                        *conv->src_desc,*conv->filter_desc,*conv->dst_desc,
+                        {TO_DIM_T(sz),TO_DIM_T(sy),TO_DIM_T(sx)},{TO_DIM_T(dz-1),TO_DIM_T(dy-1),TO_DIM_T(dx-1)},{TO_DIM_T(pz),TO_DIM_T(py),TO_DIM_T(px)},{TO_DIM_T(pz),TO_DIM_T(py),TO_DIM_T(px)});
+    
+    conv->wrw_desc = new dnnl::convolution_backward_weights::desc(dnnl::algorithm::convolution_direct,
+                        *conv->src_desc,*conv->filter_desc,*conv->dst_desc,
+                        {TO_DIM_T(sz),TO_DIM_T(sy),TO_DIM_T(sx)},{TO_DIM_T(dz-1),TO_DIM_T(dy-1),TO_DIM_T(dx-1)},{TO_DIM_T(pz),TO_DIM_T(py),TO_DIM_T(px)},{TO_DIM_T(pz),TO_DIM_T(py),TO_DIM_T(px)});
+}
+
 static inline void onednn_conv_destroy(onednn_conv_handle_t * conv){
     delete conv->src_desc;
     delete conv->filter_desc;
@@ -236,6 +292,19 @@ static inline void onednn_conv_wrw_nchw(onednn_handle_t *handle, onednn_conv_han
     read_from_dnnl_memory(filter_grad, filter_grad_memory);
 }
 
+static inline void onednn_conv_fwd_ncdhw(onednn_handle_t *handle, onednn_conv_handle_t *conv, float * src, float * filter, float * dst)
+{
+    return onednn_conv_fwd_nchw(handle, conv, src, filter, dst);
+}
+static inline void onednn_conv_bwd_ncdhw(onednn_handle_t *handle, onednn_conv_handle_t *conv, float * src_grad, float * filter, float * dst_grad)
+{
+    return onednn_conv_bwd_nchw(handle, conv, src_grad, filter, dst_grad);
+}
+static inline void onednn_conv_wrw_ncdhw(onednn_handle_t *handle, onednn_conv_handle_t *conv, float * src, float * filter_grad, float * dst_grad)
+{
+    return onednn_conv_wrw_nchw(handle, conv, src, filter_grad, dst_grad);
+}
+
 #define DNNL_CONV_WARP(dir, layout)                                                         \
     static inline void onednn_conv_ ## dir ## _ ## layout (float *ts, float *tf, float *td, \
     size_t n, size_t w, size_t h, size_t c, size_t k, size_t fx, size_t fy,                 \
@@ -250,8 +319,26 @@ static inline void onednn_conv_wrw_nchw(onednn_handle_t *handle, onednn_conv_han
         onednn_destroy(&onednn_h);                                                          \
     }
 
+#define DNNL_CONV_3D_WARP(dir, layout)                                                              \
+    static inline void onednn_conv_ ## dir ## _ ## layout (float *ts, float *tf, float *td,         \
+    size_t n, size_t w, size_t h, size_t d, size_t c, size_t k,                                     \
+    size_t fx, size_t fy, size_t fz, size_t px, size_t py, size_t pz,                               \
+    size_t sx, size_t sy, size_t sz, size_t dx, size_t dy, size_t dz, size_t group)                 \
+    {                                                                                               \
+        onednn_handle_t onednn_h;                                                                   \
+        onednn_conv_handle_t onednn_conv_h;                                                         \
+        onednn_init(&onednn_h);                                                                     \
+        onednn_conv_init_3d(&onednn_conv_h,n,w,h,d,c,k,fx,fy,fz,px,py,pz,sx,sy,sz,dx,dy,dz,group);  \
+        onednn_conv_## dir ## _ ## layout (&onednn_h, &onednn_conv_h, ts, tf, td);                  \
+        onednn_conv_destroy(&onednn_conv_h);                                                        \
+        onednn_destroy(&onednn_h);                                                                  \
+    }
+
 DNNL_CONV_WARP(fwd, nchw)
 DNNL_CONV_WARP(bwd, nchw)
 DNNL_CONV_WARP(wrw, nchw)
+DNNL_CONV_3D_WARP(fwd, ncdhw)
+DNNL_CONV_3D_WARP(bwd, ncdhw)
+DNNL_CONV_3D_WARP(wrw, ncdhw)
 
 #endif
