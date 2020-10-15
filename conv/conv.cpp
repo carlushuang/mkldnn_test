@@ -3,7 +3,6 @@
 #include <time.h>
 #include <assert.h>
 
-// #include "mkldnn_conv.h"
 #include "onednn_conv.h"
 #include "naive_conv.h"
 #include <math.h>
