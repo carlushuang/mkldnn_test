@@ -309,7 +309,7 @@ next_cfg:
     return 1;
 }
 
-// #define TEST_CONV_3D
+#define TEST_CONV_3D
 
 int main(){
     shape_t shape;
@@ -332,7 +332,11 @@ int main(){
         rand_vector(t_input, shape.n*shape.c*shape.d*shape.h*shape.w);
         rand_vector(t_filter, shape.k*shape.c*shape.fz*shape.fy*shape.fx / shape.ng);
         onednn_conv_fwd_ncdhw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
+#ifdef HIP_NAIVE_CONV
+        hip_naive_conv_fwd_ncdhw_fp32_driver(t_input, t_filter, t_ref, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
+#else
         naive_conv_fwd_ncdhw(t_input, t_filter, t_ref, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
+#endif
         err_cnt = valid_vector_rms(t_out, t_ref, shape.n*shape.k*od*oh*ow, 1e-4);
         printf("%s ",(err_cnt==0)?"y":"n");
         fflush(stdout);
@@ -343,7 +347,11 @@ int main(){
         rand_vector(t_out, shape.n*shape.k*od*oh*ow);
         rand_vector(t_filter, shape.k*shape.c*shape.fz*shape.fy*shape.fx/shape.ng);
         onednn_conv_bwd_ncdhw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
+#ifdef HIP_NAIVE_CONV
+        hip_naive_conv_bwd_ncdhw_fp32_driver(t_ref, t_filter, t_out, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
+#else
         naive_conv_bwd_ncdhw(t_ref, t_filter, t_out, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
+#endif
         err_cnt = valid_vector_rms(t_input, t_ref, shape.n*shape.c*shape.d*shape.h*shape.w, 1e-4);
         printf("%s ",(err_cnt==0)?"y":"n");
         fflush(stdout);
@@ -354,7 +362,11 @@ int main(){
         rand_vector(t_input, shape.n*shape.c*shape.d*shape.h*shape.w);
         rand_vector(t_out, shape.n*shape.k*od*oh*ow);
         onednn_conv_wrw_ncdhw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
+#ifdef HIP_NAIVE_CONV
+        hip_naive_conv_wrw_ncdhw_fp32_driver(t_input, t_ref, t_out, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
+#else
         naive_conv_wrw_ncdhw(t_input, t_ref, t_out, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
+#endif
         err_cnt = valid_vector_rms(t_filter, t_ref, shape.k*shape.c*shape.fz*shape.fy*shape.fx/shape.ng, 1e-4);
         printf("%s ",(err_cnt==0)?"y":"n");
         fflush(stdout);
