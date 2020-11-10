@@ -231,12 +231,12 @@ static size_t next_config_conv3d(shape_t *shape){
     size_t pz_arr[]={0,1,2};
     size_t py_arr[]={0,1,2};
     size_t px_arr[]={0,1,2};
-    size_t sz_arr[]={0,1,2};
-    size_t sy_arr[]={0,1,2};
-    size_t sx_arr[]={0,1,2};
-    size_t dz_arr[]={0,1,2};
-    size_t dy_arr[]={0,1,2};
-    size_t dx_arr[]={0,1,2};
+    size_t sz_arr[]={1,2,3};
+    size_t sy_arr[]={1,2,3};
+    size_t sx_arr[]={1,2,3};
+    size_t dz_arr[]={1,2,3};
+    size_t dy_arr[]={1,2,3};
+    size_t dx_arr[]={1,2,3};
 
 #endif
     static size_t have_next=1;
