@@ -6,6 +6,8 @@
 #include "onednn_conv.h"
 #include "naive_conv.h"
 #ifdef HIP_NAIVE_CONV
+#include <half.hpp>
+using half_float::half;
 #include "hip_naive_conv_driver.h"
 #endif
 #include <math.h>
@@ -19,6 +21,17 @@ static void rand_vector(float * vec, size_t num){
     if(!inited){ inited = 1; srand (time(NULL));}
     for(i=0;i<num;i++) vec[i] = ((float)(rand()%1000))/1000.0f;
 }
+#ifdef HIP_NAIVE_CONV
+static void convert_vector_half2float(float * dst, half * src, size_t num)
+{
+    for(size_t i=0;i<num;i++) dst[i] = half_float::half_cast<float>(src[i]);
+}
+static void convert_vector_float2half(half * dst, float * src, size_t num)
+{
+    for(size_t i=0;i<num;i++) dst[i] = half_float::half_cast<half_float::half>(src[i]);
+}
+#endif
+
 static size_t valid_vector(float *lhs, float *rhs, size_t num, float delta=0.02){
     size_t i;
     size_t err_cnt=0;
@@ -47,6 +60,7 @@ static size_t valid_vector_rms(float *lhs, float *rhs, size_t num, float thresho
     return rms<threshold?0:1;
     //return 0;
 }
+
 static void dump_vector_nchw(float * t, size_t n, size_t c, size_t h, size_t w){
     size_t in,ic,ih,iw;
     for(in=0;in<n;in++){
@@ -104,7 +118,7 @@ typedef struct {
 
 static size_t next_config(shape_t *shape){
 #if 1
-    size_t n_arr[] ={1,2,4};
+    size_t n_arr[] ={1, 8, 16};
     size_t c_arr[] ={3,8,24};
     size_t g_arr[] ={1,2,4};
     // size_t g_arr[] ={2,4};
@@ -220,10 +234,10 @@ next_cfg:
 static size_t next_config_conv3d(shape_t *shape){
 #if 1
     size_t n_arr[] ={1,2,4};
-    size_t c_arr[] ={3,4,16};
-    size_t g_arr[] ={1,2,4};
+    size_t c_arr[] ={3,16};
+    size_t g_arr[] ={1,4};
     size_t wh_arr[]={7,20,32};
-    size_t d_arr[]={8,23};
+    size_t d_arr[]={23};
     size_t k_arr[] ={4,8};
     size_t fz_arr[]={1,3,5};
     size_t fy_arr[]={1,3,5};
@@ -342,10 +356,27 @@ next_cfg:
     return 1;
 }
 
-#define TEST_CONV_3D
+#define DIRECTION_FWD   (0 << 4)
+#define DIRECTION_BWD   (1 << 4)
+#define DIRECTION_WRW   (2 << 4)
+
+#define DATA_TYPE_FP32 0
+#define DATA_TYPE_FP16 1
+
+static inline float get_tolerence(int direction, int data_type)
+{
+    if(data_type == DATA_TYPE_FP32){
+        return 1e-4;
+    }else if(data_type == DATA_TYPE_FP16){
+        return 8.2e-3;
+    }
+    else
+        assert(0);
+    
+}
 
 int main(){
-    auto test_conv_3d = [&](){
+    auto test_conv_3d = [&](int data_type){
         shape_t shape;
         printf(" n  w  h  d  c  k  fx fy fz px py pz sx sy sz dx dy dz ow oh od ng| fwd     bwd       wrw\n");
         while(next_config_conv3d(&shape)){
@@ -366,11 +397,23 @@ int main(){
             rand_vector(t_filter, shape.k*shape.c*shape.fz*shape.fy*shape.fx / shape.ng);
             onednn_conv_fwd_ncdhw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
 #ifdef HIP_NAIVE_CONV
-            hip_naive_conv_fwd_ncdhw_fp32_driver(t_input, t_filter, t_ref, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
+            if(data_type == DATA_TYPE_FP16){
+                half * t_input_fp16 = new half[shape.n*shape.c*shape.d*shape.h*shape.w];
+                half * t_filter_fp16 = new half[shape.k*shape.c*shape.fz*shape.fy*shape.fx / shape.ng];
+                half * t_ref_fp16 = new half[shape.n*shape.k*od*oh*ow];
+                convert_vector_float2half(t_input_fp16, t_input, shape.n*shape.c*shape.d*shape.h*shape.w);
+                convert_vector_float2half(t_filter_fp16, t_filter, shape.k*shape.c*shape.fz*shape.fy*shape.fx / shape.ng);
+                hip_naive_conv_fwd_ncdhw_fp16_driver(t_input_fp16, t_filter_fp16, t_ref_fp16, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
+                convert_vector_half2float(t_ref, t_ref_fp16, shape.n*shape.k*od*oh*ow);
+                delete [] t_input_fp16;
+                delete [] t_filter_fp16;
+                delete [] t_ref_fp16;
+            }else
+                hip_naive_conv_fwd_ncdhw_fp32_driver(t_input, t_filter, t_ref, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
 #else
             naive_conv_fwd_ncdhw(t_input, t_filter, t_ref, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
 #endif
-            err_cnt = valid_vector_rms(t_out, t_ref, shape.n*shape.k*od*oh*ow, 1e-4);
+            err_cnt = valid_vector_rms(t_out, t_ref, shape.n*shape.k*od*oh*ow, get_tolerence(DIRECTION_FWD, data_type));
             printf("%s ",(err_cnt==0)?"y":"n");
             fflush(stdout);
             assert(err_cnt==0 && "fail to validate fwd");
@@ -381,11 +424,23 @@ int main(){
             rand_vector(t_filter, shape.k*shape.c*shape.fz*shape.fy*shape.fx/shape.ng);
             onednn_conv_bwd_ncdhw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
 #ifdef HIP_NAIVE_CONV
-            hip_naive_conv_bwd_ncdhw_fp32_driver(t_ref, t_filter, t_out, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
+            if(data_type == DATA_TYPE_FP16){
+                half * t_ref_fp16 = new half[shape.n*shape.c*shape.d*shape.h*shape.w];
+                half * t_filter_fp16 = new half[shape.k*shape.c*shape.fz*shape.fy*shape.fx / shape.ng];
+                half * t_out_fp16 = new half[shape.n*shape.k*od*oh*ow];
+                convert_vector_float2half(t_filter_fp16, t_filter, shape.k*shape.c*shape.fz*shape.fy*shape.fx / shape.ng);
+                convert_vector_float2half(t_out_fp16, t_out, shape.n*shape.k*od*oh*ow);
+                hip_naive_conv_bwd_ncdhw_fp16_driver(t_ref_fp16, t_filter_fp16, t_out_fp16, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
+                convert_vector_half2float(t_ref, t_ref_fp16, shape.n*shape.c*shape.d*shape.h*shape.w);
+                delete [] t_ref_fp16;
+                delete [] t_filter_fp16;
+                delete [] t_out_fp16;
+            }else
+                hip_naive_conv_bwd_ncdhw_fp32_driver(t_ref, t_filter, t_out, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
 #else
             naive_conv_bwd_ncdhw(t_ref, t_filter, t_out, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
 #endif
-            err_cnt = valid_vector_rms(t_input, t_ref, shape.n*shape.c*shape.d*shape.h*shape.w, 1e-4);
+            err_cnt = valid_vector_rms(t_input, t_ref, shape.n*shape.c*shape.d*shape.h*shape.w, get_tolerence(DIRECTION_BWD, data_type));
             printf("%s ",(err_cnt==0)?"y":"n");
             fflush(stdout);
             assert(err_cnt==0 && "fail to validate bwd");
@@ -396,11 +451,23 @@ int main(){
             rand_vector(t_out, shape.n*shape.k*od*oh*ow);
             onednn_conv_wrw_ncdhw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
 #ifdef HIP_NAIVE_CONV
-            hip_naive_conv_wrw_ncdhw_fp32_driver(t_input, t_ref, t_out, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
+            if(data_type == DATA_TYPE_FP16){
+                half * t_input_fp16 = new half[shape.n*shape.c*shape.d*shape.h*shape.w];
+                half * t_ref_fp16 = new half[shape.k*shape.c*shape.fz*shape.fy*shape.fx / shape.ng];
+                half * t_out_fp16 = new half[shape.n*shape.k*od*oh*ow];
+                convert_vector_float2half(t_input_fp16, t_input, shape.n*shape.c*shape.d*shape.h*shape.w);
+                convert_vector_float2half(t_out_fp16, t_out, shape.n*shape.k*od*oh*ow);
+                hip_naive_conv_wrw_ncdhw_fp16_driver(t_input_fp16, t_ref_fp16, t_out_fp16, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
+                convert_vector_half2float(t_ref, t_ref_fp16, shape.k*shape.c*shape.fz*shape.fy*shape.fx / shape.ng);
+                delete [] t_input_fp16;
+                delete [] t_ref_fp16;
+                delete [] t_out_fp16;
+            }else
+                hip_naive_conv_wrw_ncdhw_fp32_driver(t_input, t_ref, t_out, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
 #else
             naive_conv_wrw_ncdhw(t_input, t_ref, t_out, shape.n,shape.w,shape.h,shape.d,shape.c,shape.k,shape.fx,shape.fy,shape.fz,shape.px,shape.py,shape.pz,shape.sx,shape.sy,shape.sz,shape.dx,shape.dy,shape.dz,shape.ng);
 #endif
-            err_cnt = valid_vector_rms(t_filter, t_ref, shape.k*shape.c*shape.fz*shape.fy*shape.fx/shape.ng, 1e-4);
+            err_cnt = valid_vector_rms(t_filter, t_ref, shape.k*shape.c*shape.fz*shape.fy*shape.fx/shape.ng, get_tolerence(DIRECTION_WRW, data_type));
             printf("%s ",(err_cnt==0)?"y":"n");
             fflush(stdout);
             assert(err_cnt==0 && "fail to validate wrw");
@@ -414,7 +481,7 @@ int main(){
         }
     };
 
-    auto test_conv_2d = [&](){
+    auto test_conv_2d = [&](int data_type){
         shape_t shape;
         printf(" n  w  h  c  k  fx fy px py sx sy dx dy ow oh ng| fwd     bwd       wrw\n");
         while(next_config(&shape)){
@@ -433,11 +500,23 @@ int main(){
             rand_vector(t_filter, shape.k*shape.c*shape.fy*shape.fx / shape.ng);
             onednn_conv_fwd_nchw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy,shape.ng);
 #ifdef HIP_NAIVE_CONV
-            hip_naive_conv_fwd_nchw_fp32_driver(t_input, t_filter, t_ref, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy,shape.ng);
+            if(data_type == DATA_TYPE_FP16){
+                half * t_input_fp16 = new half[shape.n*shape.c*shape.h*shape.w];
+                half * t_filter_fp16 = new half[shape.k*shape.c*shape.fy*shape.fx / shape.ng];
+                half * t_ref_fp16 = new half[shape.n*shape.k*oh*ow];
+                convert_vector_float2half(t_input_fp16, t_input, shape.n*shape.c*shape.h*shape.w);
+                convert_vector_float2half(t_filter_fp16, t_filter, shape.k*shape.c*shape.fy*shape.fx / shape.ng);
+                hip_naive_conv_fwd_nchw_fp16_driver(t_input_fp16, t_filter_fp16, t_ref_fp16, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy,shape.ng);
+                convert_vector_half2float(t_ref, t_ref_fp16, shape.n*shape.k*oh*ow);
+                delete [] t_input_fp16;
+                delete [] t_filter_fp16;
+                delete [] t_ref_fp16;
+            }else
+                hip_naive_conv_fwd_nchw_fp32_driver(t_input, t_filter, t_ref, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy,shape.ng);
 #else
             naive_conv_fwd_nchw(t_input, t_filter, t_ref, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy,shape.ng);
 #endif
-            err_cnt = valid_vector_rms(t_out, t_ref, shape.n*shape.k*oh*ow, 1e-4);
+            err_cnt = valid_vector_rms(t_out, t_ref, shape.n*shape.k*oh*ow, get_tolerence(DIRECTION_FWD, data_type));
             printf("%s ",(err_cnt==0)?"y":"n");
             fflush(stdout);
             assert(err_cnt==0 && "fail to validate fwd");
@@ -448,11 +527,23 @@ int main(){
             rand_vector(t_filter, shape.k*shape.c*shape.fy*shape.fx/shape.ng);
             onednn_conv_bwd_nchw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy,shape.ng);
 #ifdef HIP_NAIVE_CONV
-            hip_naive_conv_bwd_nchw_fp32_driver(t_ref, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy,shape.ng);
+            if(data_type == DATA_TYPE_FP16){
+                half * t_ref_fp16 = new half[shape.n*shape.c*shape.h*shape.w];
+                half * t_filter_fp16 = new half[shape.k*shape.c*shape.fy*shape.fx / shape.ng];
+                half * t_out_fp16 = new half[shape.n*shape.k*oh*ow];
+                convert_vector_float2half(t_out_fp16, t_out, shape.n*shape.k*oh*ow);
+                convert_vector_float2half(t_filter_fp16, t_filter, shape.k*shape.c*shape.fy*shape.fx / shape.ng);
+                hip_naive_conv_bwd_nchw_fp16_driver(t_ref_fp16, t_filter_fp16, t_out_fp16, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy,shape.ng);
+                convert_vector_half2float(t_ref, t_ref_fp16, shape.n*shape.c*shape.h*shape.w);
+                delete [] t_ref_fp16;
+                delete [] t_filter_fp16;
+                delete [] t_out_fp16;
+            }else
+                hip_naive_conv_bwd_nchw_fp32_driver(t_ref, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy,shape.ng);
 #else
             naive_conv_bwd_nchw(t_ref, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy,shape.ng);
 #endif
-            err_cnt = valid_vector_rms(t_input, t_ref, shape.n*shape.c*shape.h*shape.w, 1e-4);
+            err_cnt = valid_vector_rms(t_input, t_ref, shape.n*shape.c*shape.h*shape.w, get_tolerence(DIRECTION_BWD, data_type));
             printf("%s ",(err_cnt==0)?"y":"n");
             fflush(stdout);
             assert(err_cnt==0 && "fail to validate bwd");
@@ -463,11 +554,23 @@ int main(){
             rand_vector(t_out, shape.n*shape.k*oh*ow);
             onednn_conv_wrw_nchw(t_input, t_filter, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy,shape.ng);
 #ifdef HIP_NAIVE_CONV
-            hip_naive_conv_wrw_nchw_fp32_driver(t_input, t_ref, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy,shape.ng);
+            if(data_type == DATA_TYPE_FP16){
+                half * t_input_fp16 = new half[shape.n*shape.c*shape.h*shape.w];
+                half * t_ref_fp16 = new half[shape.k*shape.c*shape.fy*shape.fx / shape.ng];
+                half * t_out_fp16 = new half[shape.n*shape.k*oh*ow];
+                convert_vector_float2half(t_input_fp16, t_input, shape.n*shape.c*shape.h*shape.w);
+                convert_vector_float2half(t_out_fp16, t_out, shape.n*shape.k*oh*ow);
+                hip_naive_conv_wrw_nchw_fp16_driver(t_input_fp16, t_ref_fp16, t_out_fp16, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy,shape.ng);
+                convert_vector_half2float(t_ref, t_ref_fp16, shape.k*shape.c*shape.fy*shape.fx / shape.ng);
+                delete [] t_input_fp16;
+                delete [] t_ref_fp16;
+                delete [] t_out_fp16;
+            }else
+                hip_naive_conv_wrw_nchw_fp32_driver(t_input, t_ref, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy,shape.ng);
 #else
             naive_conv_wrw_nchw(t_input, t_ref, t_out, shape.n,shape.w,shape.h,shape.c,shape.k,shape.fx,shape.fy,shape.px,shape.py,shape.sx,shape.sy,shape.dx,shape.dy,shape.ng);
 #endif
-            err_cnt = valid_vector_rms(t_filter, t_ref, shape.k*shape.c*shape.fy*shape.fx/shape.ng, 1e-4);
+            err_cnt = valid_vector_rms(t_filter, t_ref, shape.k*shape.c*shape.fy*shape.fx/shape.ng, get_tolerence(DIRECTION_WRW, data_type));
             printf("%s ",(err_cnt==0)?"y":"n");
             fflush(stdout);
             assert(err_cnt==0 && "fail to validate wrw");
@@ -481,6 +584,8 @@ int main(){
         }
     };
 
-    test_conv_2d();
-    test_conv_3d();
+    test_conv_2d(DATA_TYPE_FP32);
+    test_conv_3d(DATA_TYPE_FP32);
+    test_conv_2d(DATA_TYPE_FP16);
+    test_conv_3d(DATA_TYPE_FP16);
 }
